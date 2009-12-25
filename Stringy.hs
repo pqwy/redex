@@ -75,16 +75,20 @@ instance Read Term where
 
 bracketComposite, showsLam :: Term -> ShowS
 
-bracketComposite t@(view -> Var _) = showsLam t
-bracketComposite t                 = showParen True (showsLam t)
+bracketComposite t@(ast -> Var _) = showsLam t
+bracketComposite t                = showParen True (showsLam t)
 
-showsLam (view -> Var x) = showString x
 
-showsLam (view -> App l r) = leftFun l . showChar ' ' . bracketComposite r
-    where leftFun (view -> Lam _ _) = bracketComposite l
-          leftFun _                 = showsLam l
+showsLam (ast -> Var x) = showString x
 
-showsLam (view -> Lam x t) = showChar '\\' . showString x . run t
-    where run (view -> Lam x t') = showString x . run t
-          run t                  = showChar '.' . showsLam t
+showsLam (ast -> App l r) = leftFun l . showChar ' ' . bracketComposite r
+    where leftFun (ast -> Lam _ _) = bracketComposite l
+          leftFun _                = showsLam l
 
+showsLam (ast -> Lam x t) = showChar '\\' . showString x . run t
+    where run (ast -> Lam x t') = showString x . run t
+          run t                 = showChar '.' . showsLam t
+
+
+instance Show Term where
+    showsPrec _ = showsLam

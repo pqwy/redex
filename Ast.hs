@@ -1,7 +1,8 @@
 module Ast
     ( Term, VarID, SpliceID
-    , AST(..), view, foldTerm
+    , AST(..), ast, foldTerm
     , var, app, lam, leet
+    , freeVars
     ) where
 
 import Prelude hiding ( elem )
@@ -19,7 +20,8 @@ data Term = Var_ VarID
           | Lam_ Vars VarID Term
           | Let_ Vars VarID Term Term
           | Splice_ Vars Vars SpliceID
-    deriving (Show, Eq)
+    -- deriving (Show, Eq)
+    deriving (Eq)
 
 
 foldTerm :: (VarID -> a)
@@ -60,27 +62,15 @@ data AST = Var VarID
          | App Term Term
          | Lam VarID Term
          | Let VarID Term Term
-    deriving (Show, Eq)
+    -- deriving (Show, Eq)
+    deriving (Eq)
 
 
-view :: Term -> AST
-view (Var_ x) = Var x
-view (App_ _ l r) = App l r
-view (Lam_ _ x m) = Lam x m
-view (Let_ _ x e m) = Let x e m
-
-
-substitute :: Term -> VarID -> Term -> Term
-substitute s x t
-    | not (x `elem` freeVars t) = t
-    | otherwise = case t of
-        Var_ _       -> t
-        Lam_ _ x m   -> lam x (substitute s x m)
-        App_ _ a b   -> app (substitute s x a)
-                            (substitute s x b)
-        Let_ _ x e m -> leet x (substitute s x e)
-                               (substitute s x m)
-         -- Splice _ 
+ast :: Term -> AST
+ast (Var_ x) = Var x
+ast (App_ _ l r) = App l r
+ast (Lam_ _ x m) = Lam x m
+ast (Let_ _ x e m) = Let x e m
 
 
 
