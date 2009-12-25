@@ -1,6 +1,8 @@
 module Rep where
 
+
 import SimpleSet ( Set, singleton, union, remove )
+
 
 type VarID = String
 type SpliceID = String
