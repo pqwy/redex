@@ -8,6 +8,8 @@ module Stringy
 
 import Ast
 
+import Data.Function
+
 import Text.Parsec
 import Text.Parsec.String
 
@@ -68,8 +70,8 @@ unexpectedEOF = any (== SysUnExpect "") . errorMessages
 
 
 instance Read Term where
-    readsPrec _ = either (const []) (:[]) . parse parsePlus "<literal>"
-        where parsePlus = spaces *> ((,) <$> parseTerm <*> getInput)
+    readsPrec _ = either (const []) (:[]) . parse p "<literal>"
+        where p = spaces *> ((,) <$> parseTerm <*> getInput)
 
 
 
@@ -81,13 +83,22 @@ bracketComposite t                = showParen True (showsLam t)
 
 showsLam (ast -> Var x) = showString x
 
-showsLam (ast -> App l r) = leftFun l . showChar ' ' . bracketComposite r
-    where leftFun (ast -> Lam _ _) = bracketComposite l
-          leftFun _                = showsLam l
+showsLam (ast -> App l r) =
+    ( case ast l of
+           App _ _ -> showsLam l
+           _       -> bracketComposite l )
+    . (' ' :) . bracketComposite r
 
-showsLam (ast -> Lam x t) = showChar '\\' . showString x . run t
-    where run (ast -> Lam x t') = showString x . run t
-          run t                 = showChar '.' . showsLam t
+showsLam (ast -> Lam x t) =
+    ('\\' :) . (x ++)
+    . fix ( \f t -> case ast t of
+                Lam x t' -> (x ++) . f t'
+                _        -> ('.' :) . showsLam t ) t
+
+showsLam (ast -> Let x e t) =
+    ("let " ++)
+    . showParen True ( ((x ++ " = ") ++) . showsLam e )
+    . (' ' :) . showsLam t
 
 
 instance Show Term where

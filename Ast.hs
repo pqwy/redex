@@ -2,7 +2,7 @@ module Ast
     ( Term, VarID, SpliceID
     , AST(..), ast, foldTerm
     , var, app, lam, leet
-    , freeVars
+    , freeVars, freeIn
     ) where
 
 import Prelude hiding ( elem )
@@ -36,11 +36,17 @@ foldTerm var app lam leet = f
           f (Lam_ _ x m)   = lam x (f m)
           f (Let_ _ x e m) = leet x (f e) (f m)
 
+
 freeVars :: Term -> Vars
 freeVars (Var_ x) = singleton x
 freeVars (App_ xs _ _) = xs
 freeVars (Lam_ xs _ _) = xs
+freeVars (Let_ xs _ _ _) = xs
 freeVars (Splice_ xs _ _) = xs
+
+
+freeIn :: VarID -> Term -> Bool
+freeIn x t = x `elem` freeVars t
 
 
 var :: VarID -> Term
@@ -53,7 +59,7 @@ lam :: VarID -> Term -> Term
 lam x m = Lam_ (x `remove` freeVars m) x m
 
 leet :: VarID -> Term -> Term -> Term
-leet x e m | x `elem` freeVars m = Let_ nufree x e m
+leet x e m | x `freeIn` m = Let_ nufree x e m
            | otherwise = m
     where nufree = x `remove` (freeVars e `union` freeVars m)
 
