@@ -2,7 +2,11 @@
 {-# LANGUAGE PackageImports, GeneralizedNewtypeDeriving #-}
 {-# OPTIONS_GHC -fno-warn-overlapping-patterns #-}
 
-module Operations where
+module Operations
+    ( Reduceron, reduce, noenv
+    , whnf, lazyBeta, splicingBeta
+    , whnf1, whnf2
+    ) where
 
 import Ast
 
@@ -18,6 +22,7 @@ import "monads-fd" Control.Monad.State
 import Control.Applicative
 
 
+-- tree xforms {{{
 
 substitute :: Term -> VarID -> Term -> Term
 substitute s x t | not (x `freeIn` t) = t
@@ -59,7 +64,9 @@ bifurcate x e f a b | pa && pb = pure (leet x e (f a b))
 
     where (pa, pb) = (x `freeIn` a, x `freeIn` b)
 
+-- }}}
 
+-- betas {{{
 
 beta f (ast -> Lam x m) t = f x m t
 beta _ _ _ = error "beta: term is not a lambda abstraction"
@@ -70,39 +77,32 @@ splicingBeta, lazyBeta :: Term -> Term -> Term
 splicingBeta = beta (\x m t -> substitute t x m)
 lazyBeta = beta (\x m t -> leet x t m)
 
+-- }}}
 
--- nf :: Term -> Term
--- nf t@(ast -> Lam x m) = lam x (nf m)
--- nf t@(
+-- normalizations {{{
 
--- whnf' :: Term -> Maybe Term
--- whnf' (ast -> App f@(ast -> Lam _ _) a) = pure (beta f a)
--- whnf' (ast -> App f a) =
---     do t' <- flip app a <$> whnf' f
---        whnf' t' <|> pure t'
--- whnf' _ = Nothing
+whnf :: (Term -> Term -> Term) -> Term -> Reduceron Term
 
+whnf beta t@(ast -> App f a) =
+    whnf beta f >>= \f' ->
+        case ast f' of
+             Lam _ _ -> pure (app f' a) <|> whnf beta (beta f' a)
+             Let _ _ _ | Just f'' <- rotateLet f' ->
+                            pure (app f' a) <|> pure (app f'' a)
+                        <|> whnf beta (beta f'' a)
+             _ -> pure (app f' a)
 
--- w2 :: (Monad f, Alternative f) => Term -> f Term
--- w2 t@(ast -> App f@(ast -> Lam _ _) a) = pure t <|> w2 (beta f a)
--- w2 t@(ast -> App f a) =
---     do f' <- w2 f
---        let t' = app f' a
---        case ast f' of
---             Lam _ _ -> w2 t'
---             _       -> pure t'
--- w2 t = pure t
+whnf beta t@(ast -> Let x e m) =
+    flip (leet x) <$> (push x e *> whnf beta m) <*> pop
 
+whnf beta t@(ast -> Lam _ _) = pure t
 
--- etaClean :: Term -> Term
--- etaClean t = maybe t id (ec t)
--- 
---     where ec t@(ast -> Lam x (ast -> App f (ast -> Var y)))
---                 | x == y = (ec f >>= ec) <|> pure f
---           ec (ast -> Lam x m) = lam x <$> (ec m) >>= ec
---           ec (ast -> App a b) = app <$> (ec a) <*> (ec b)
---           ec _ = empty
+whnf beta t@(ast -> Var x) =
+    pure t <|> (resolve x >>= whnf beta >>= \t' -> assert x t' *> pure t')
 
+-- }}}
+
+-- REDUCERON {{{
 
 type Env = [(VarID, Term)]
 
@@ -130,71 +130,10 @@ assert x t = modify (mod' x t)
     where mod' _ _ [] = error "assert: variable not active"
           mod' x t (yt@(y, t') : xts) | x == y = (y, t) : xts
                                       | otherwise = yt : mod' x t xts
+-- }}}
 
+whnf1, whnf2 :: Term -> [Term]
+whnf1 t = whnf splicingBeta t `reduce` noenv
+whnf2 t = whnf lazyBeta t `reduce` noenv
 
--- w3 :: Term -> Reduceron Term
--- 
--- w3 t@(ast -> App f a) = 
---     w3 f >>= \f' -> case ast f' of
---                          Lam _ _ -> pure (app f' a) <|> w3 (splicingBeta f' a)
---                          Let _ _ _ | Just f'' <- rotateLet f' ->
---                                         pure (app f'' a) <|> w3 (splicingBeta f'' a)
---                          _       -> pure (app f' a)
--- 
--- -- w3 t@(ast -> Let x e m) = leetMe <$> (push x e *> w3 m) <*> pop
--- --     where leetMe m' e' = fromJust (pushLet x e' m' <|> pure m')
--- 
--- w3 t@(ast -> Let x e m) =
---     flip (leet x) <$> (push x e *> w3 m) <*> pop
--- 
--- w3 t@(ast -> Lam _ _) = pure t
--- 
--- w3 t@(ast -> Var x) =
---     pure t <|> (resolve x >>= w3 >>= \t' -> assert x t' *> pure t')
--- 
--- w3 t = pure t
--- 
--- 
--- 
--- w4 :: Term -> Reduceron Term
--- 
--- w4 t@(ast -> App f a) =
---     w4 f >>= \f' -> case ast f' of
---                          Lam _ _   -> pure (app f' a) <|> w4 (lazyBeta f' a)
---                          Let _ _ _ | Just f'' <- rotateLet f' ->
---                                         pure (app f' a) <|> pure (app f'' a)
---                                                         <|> w4 (lazyBeta f'' a)
---                          _         -> pure (app f' a)
--- 
--- w4 t@(ast -> Let x e m) =
---     flip (leet x) <$> (push x e *> w4 m) <*> pop
--- 
--- w4 t@(ast -> Lam _ _) = pure t
--- 
--- w4 t@(ast -> Var x) =
---     pure t <|> (resolve x >>= w4 >>= \t' -> assert x t' *> pure t')
--- 
--- w4 t = pure t
--- 
-
-
-whnf :: (Term -> Term -> Term) -> Term -> Reduceron Term
-
-whnf beta t@(ast -> App f a) =
-    whnf beta f >>= \f' ->
-        case ast f' of
-             Lam _ _ -> pure (app f' a) <|> whnf beta (beta f' a)
-             Let _ _ _ | Just f'' <- rotateLet f' ->
-                            pure (app f' a) <|> pure (app f'' a)
-                        <|> whnf beta (beta f'' a)
-             _ -> pure (app f' a)
-
-whnf beta t@(ast -> Let x e m) =
-    flip (leet x) <$> (push x e *> whnf beta m) <*> pop
-
-whnf beta t@(ast -> Lam _ _) = pure t
-
-whnf beta t@(ast -> Var x) =
-    pure t <|> (resolve x >>= whnf beta >>= \t' -> assert x t' *> pure t')
-
-
+-- vim:set fdm=marker:

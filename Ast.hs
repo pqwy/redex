@@ -1,6 +1,6 @@
 module Ast
     ( Term, VarID, SpliceID
-    , AST(..), ast, foldTerm
+    , AST(..), ast
     , var, app, lam, leet
     , freeVars, freeIn
     ) where
@@ -22,19 +22,6 @@ data Term = Var_ VarID
           | Splice_ Vars Vars SpliceID
     -- deriving (Show, Eq)
     deriving (Eq)
-
-
-foldTerm :: (VarID -> a)
-         -> (a -> a -> a)
-         -> (VarID -> a -> a)
-         -> (VarID -> a -> a -> a)
-         -> Term
-         -> a
-foldTerm var app lam leet = f
-    where f (Var_ x)       = var x
-          f (App_ _ l r)   = app (f l) (f r)
-          f (Lam_ _ x m)   = lam x (f m)
-          f (Let_ _ x e m) = leet x (f e) (f m)
 
 
 freeVars :: Term -> Vars

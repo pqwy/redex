@@ -11,6 +11,6 @@ problem2 = read "(λf.(λu.f (u u)) λu.f (u u)) (λsx.s) P Q R"
 problem3 = read "(λf.(λu.f (u u)) λw.f (w w)) (λsx.s) P Q R"
 
 test3, test4 :: Term -> IO ()
-test3 = mapM_ print . take 50 . flip reduce noenv . w3
-test4 = mapM_ print . take 50 . flip reduce noenv . w4
+test3 = mapM_ print . take 50 . whnf1
+test4 = mapM_ print . take 50 . whnf2
 
