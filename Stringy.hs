@@ -18,7 +18,7 @@ import Text.Parsec.Error ( Message(..), errorMessages )
 import Control.Monad
 import Control.Applicative hiding ( Alternative(..), many )
 
-
+-- in {{{
 
 bracketed :: Parser a -> Parser a
 bracketed p = char '(' *> spaces *> p <* spaces <* char ')'
@@ -38,8 +38,8 @@ parseLam = do
 
 parseVar = var <$> largeVar
 
-parseLet = uncurry leet
-       <$> (string "let" *> spaces *> binder <* spaces)
+parseLet = flip (foldr (uncurry leet))
+       <$> (try (string "let") *> spaces *> many1 (try (binder <* spaces)))
        <*> parseTerm
 
     where binder = bracketed ((,) <$> largeVar <* eq <*> parseTerm)
@@ -73,7 +73,9 @@ instance Read Term where
     readsPrec _ = either (const []) (:[]) . parse p "<literal>"
         where p = spaces *> ((,) <$> parseTerm <*> getInput)
 
+-- }}}
 
+-- out {{{
 
 bracketComposite, showsLam :: Term -> ShowS
 
@@ -95,11 +97,19 @@ showsLam (ast -> Lam x t) =
                 Lam x t' -> (x ++) . f t'
                 _        -> ('.' :) . showsLam t ) t
 
-showsLam (ast -> Let x e t) =
+showsLam t@(ast -> Let _ _ _) =
     ("let " ++)
-    . showParen True ( ((x ++ " = ") ++) . showsLam e )
-    . (' ' :) . showsLam t
+    . fix ( \f t -> case ast t of
+                Let x e t' -> binder x e . f t'
+                _          -> showsLam t ) t
+
+    where binder x e = showParen True ( ((x ++ " = ") ++) . showsLam e ) . (' ' :)
 
 
 instance Show Term where
     showsPrec _ = showsLam
+
+-- }}}
+
+
+-- vim:set fdm=marker:

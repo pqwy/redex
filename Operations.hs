@@ -102,7 +102,7 @@ whnf beta t@(ast -> Var x) =
 
 -- }}}
 
--- REDUCERON {{{
+-- THE REDUCERON {{{
 
 type Env = [(VarID, Term)]
 
@@ -127,7 +127,8 @@ pop = gets (snd . head) <* modify tail
 
 assert :: VarID -> Term -> Reduceron ()
 assert x t = modify (mod' x t)
-    where mod' _ _ [] = error "assert: variable not active"
+
+    where mod' _ _ [] = error ("assert: var " ++ x ++" went missing?")
           mod' x t (yt@(y, t') : xts) | x == y = (y, t) : xts
                                       | otherwise = yt : mod' x t xts
 -- }}}
