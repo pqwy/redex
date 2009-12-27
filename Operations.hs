@@ -3,7 +3,7 @@
 {-# OPTIONS_GHC -fno-warn-overlapping-patterns #-}
 
 module Operations
-    ( substitute, {- rotateLet,-} leet
+    ( substitute, leet
     , alpha, lazyBeta, splicingBeta
     ) where
 
@@ -54,8 +54,8 @@ leet x e t = case ast (openScopeFor e t) of
         Var _ | x `freeIn` e -> fixLet x e t
               | otherwise    -> e
 
-    where bifurcate f a b | not (x `freeIn` a) = f a (leet x e b)
-                          | not (x `freeIn` b) = f (leet x e a) b
+    where bifurcate f a b | x `notFreeIn` a = f a (leet x e b)
+                          | x `notFreeIn` b = f (leet x e a) b
                           | otherwise = fixLet x e t
 
 -- }}}
