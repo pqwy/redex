@@ -24,7 +24,7 @@ openScopeFor t2 t@(ast -> Lam x m)
 
 openScopeFor t2 t@(ast -> Let x e m)
     | x `notFreeIn` t2 = t
-    | otherwise = let x' = newNameIn x [e, m, t2]
+    | otherwise = let x' = x `newNameIn` [e, m, t2]
                   in fixLet x' (alpha x x' e) (alpha x x' m)
 
 openScopeFor t2 t = t
@@ -44,19 +44,31 @@ substitute s x (ast . openScopeFor s -> Var _) = s
 
 
 
-leet :: VarID -> Term -> Term -> Term
-leet x e m | x `notFreeIn` m = m
+leet, spliceLet, pushLet :: VarID -> Term -> Term -> Term
+leet x e@(ast -> Var _) t = spliceLet x e t
+leet x e t = pushLet x e t
 
-leet x e t = case ast (openScopeFor e t) of
+
+spliceLet x e t | x `notFreeIn` t = t
+spliceLet x e t = case ast t of
+
+        App a b    -> app (spliceLet x e a) (spliceLet x e b)
+        Let y e1 m -> fixLet y (spliceLet x e e1) (spliceLet x e m)
+        Lam y m    -> lam y (spliceLet x e m)
+        Var _      -> e
+
+
+pushLet x e t | x `notFreeIn` t = t
+pushLet x e t = case ast (openScopeFor e t) of
 
         App a b              -> bifurcate app a b
         Let y e1 m           -> bifurcate (fixLet y) e1 m
-        Lam y m              -> lam y (leet x e m)
+        Lam y m              -> lam y (pushLet x e m)
         Var _ | x `freeIn` e -> fixLet x e t
               | otherwise    -> e
 
-    where bifurcate f a b | x `notFreeIn` a = f a (leet x e b)
-                          | x `notFreeIn` b = f (leet x e a) b
+    where bifurcate f a b | x `notFreeIn` a = f a (pushLet x e b)
+                          | x `notFreeIn` b = f (pushLet x e a) b
                           | otherwise = fixLet x e t
 
 -- }}}
