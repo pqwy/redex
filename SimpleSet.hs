@@ -2,7 +2,7 @@ module SimpleSet
     ( Set
     , null, empty, singleton, fromList
     , insert, queryRemove, elem, remove
-    , union, intersection, subset
+    , union, unions, intersection, subset
     ) where
 
 
@@ -54,8 +54,10 @@ queryRemove :: (Ord a) => a -> Set a -> Maybe (Set a)
 queryRemove a (Set xs) = Set `fmap` doit xs
 
     where doit [] = Nothing
-          doit (x:xs) | a == x = Just xs
-                      | otherwise = (x:) `fmap` doit xs
+          doit (x:xs) = case a `compare` x of
+                             EQ -> Just xs
+                             LT -> Nothing
+                             GT -> (x:) `fmap` doit xs
 
 
 elem :: (Ord a) => a -> Set a -> Bool
@@ -76,6 +78,10 @@ union (Set a) (Set b) = Set (doit a b)
                    EQ -> a : doit as bs
                    LT -> a : doit as b'
                    GT -> b : doit a' bs
+
+
+unions :: (Ord a) => [Set a] -> Set a
+unions = foldr union empty
 
 
 intersection :: (Ord a) => Set a -> Set a -> Set a

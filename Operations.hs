@@ -20,14 +20,15 @@ openScopeFor :: Term -> Term -> Term
 
 openScopeFor t2 t@(ast -> Lam x m)
     | x `notFreeIn` t2 = t
-    | otherwise = let x' = x `newNameIn` m in lam x' (alpha x x' m)
+    | otherwise = let x' = x `newNameIn` [m, t2] in lam x' (alpha x x' m)
 
 openScopeFor t2 t@(ast -> Let x e m)
     | x `notFreeIn` t2 = t
-    | otherwise = let x' = newName x (vars e `S.union` vars m)
+    | otherwise = let x' = newNameIn x [e, m, t2]
                   in fixLet x' (alpha x x' e) (alpha x x' m)
 
 openScopeFor t2 t = t
+
 
 
 substitute :: Term -> VarID -> Term -> Term
@@ -68,8 +69,8 @@ newName v vs = head [ y' | n <- [ 0 .. ]
                          , not (y' `S.elem` vs) ]
 
 
-newNameIn :: VarID -> Term -> VarID
-newNameIn v = newName v . vars
+newNameIn :: VarID -> [Term] -> VarID
+newNameIn v = newName v . S.unions . map vars
 
 
 alpha :: VarID -> VarID -> Term -> Term
@@ -89,7 +90,7 @@ splicingBeta _ _ = error "splicingBeta: lambda?"
 
 lazyBeta (ast -> Lam x m) t
         | x `notFreeIn` t = leet x t m
-        | otherwise = let x' = x `newNameIn` m
+        | otherwise = let x' = x `newNameIn` [m, t]
                       in leet x' t (alpha x x' m)
 lazyBeta _ _ = error "lazyBeta: lambda?"
 
