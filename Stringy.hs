@@ -7,6 +7,7 @@ module Stringy
 
 
 import Ast
+import Operations
 
 import Data.Function
 
@@ -22,6 +23,7 @@ import Control.Applicative hiding ( Alternative(..), many )
 
 bracketed :: Parser a -> Parser a
 bracketed p = char '(' *> spaces *> p <* spaces <* char ')'
+-- bracketed p = try (char '(' *> spaces) *> p <* spaces <* char ')'
 
 
 parseTerm, parseSingleTerm, parseLam, parseVar, parseLet :: Parser Term
@@ -40,15 +42,18 @@ parseVar = var <$> largeVar
 
 parseLet = flip (foldr (uncurry leet))
        <$> (try (string "let") *> spaces *> many1 (try (binder <* spaces)))
+       -- <$> (try (string "let") *> spaces *> many1 (binder <* spaces))
        <*> parseTerm
 
     where binder = bracketed ((,) <$> largeVar <* eq <*> parseTerm)
+    -- where binder = bracketed ((,) <$> try (largeVar <* eq) <*> parseTerm)
           eq = spaces *> string "=" *> spaces
 
 
 smallVar, largeVar :: Parser VarID
 
-smallVar = (:[]) <$> letter <?> "one-letter variable"
+-- smallVar = (:[]) <$> letter <?> "short variable"
+smallVar = (:) <$> letter <*> (many digit <|> pure []) <?> "short variable"
 
 largeVar = (:) <$> letter <*> many alphaNum <?> "variable"
 

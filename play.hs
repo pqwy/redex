@@ -3,6 +3,7 @@ module Main where
 import Ast
 import Stringy
 import Operations
+import Reductions
 
 
 problem1, problem2, problem3, problem4 :: Term

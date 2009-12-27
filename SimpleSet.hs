@@ -88,6 +88,7 @@ intersection (Set a) (Set b) = Set (doit a b)
                    GT -> doit a' bs
           doit _ _ = []
 
+
 subset :: (Ord a) => Set a -> Set a -> Bool
 subset (Set a) (Set b) = doit a b
 

@@ -30,9 +30,9 @@ whnf beta t@(ast -> App f a) =
     whnf beta f >>= \f' ->
         case ast f' of
              Lam _ _ -> pure (app f' a) <|> whnf beta (beta f' a)
-             Let _ _ _ | Just f'' <- rotateLet f' ->
-                            pure (app f' a) <|> pure (app f'' a)
-                        <|> whnf beta (beta f'' a)
+             -- Let _ _ _ | Just f'' <- rotateLet f' ->
+             --                pure (app f' a) <|> pure (app f'' a)
+             --            <|> whnf beta (beta f'' a)
              _ -> pure (app f' a)
 
 whnf beta t@(ast -> Let x e m) =

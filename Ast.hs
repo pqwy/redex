@@ -73,8 +73,6 @@ data AST = Var VarID
          | App Term Term
          | Lam VarID Term
          | Let VarID Term Term
-    -- deriving (Show, Eq)
-    deriving (Eq)
 
 
 ast :: Term -> AST
