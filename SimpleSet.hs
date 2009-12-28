@@ -1,3 +1,6 @@
+{-# LANGUAGE ViewPatterns, PatternGuards  #-}
+{-# OPTIONS_GHC -fno-warn-overlapping-patterns #-}
+
 module SimpleSet
     ( Set
     , null, empty, singleton, fromList
@@ -54,18 +57,21 @@ queryRemove :: (Ord a) => a -> Set a -> Maybe (Set a)
 queryRemove a (Set xs) = Set `fmap` doit xs
 
     where doit [] = Nothing
-          doit (x:xs) = case a `compare` x of
-                             EQ -> Just xs
-                             LT -> Nothing
-                             GT -> (x:) `fmap` doit xs
+          doit (x:xs) =
+              case a `compare` x of
+                   EQ -> Just xs
+                   LT -> Nothing
+                   GT -> (x:) `fmap` doit xs
 
 
 elem :: (Ord a) => a -> Set a -> Bool
-elem a s = maybe False (const True) (queryRemove a s)
+elem a (queryRemove a -> Just _) = True
+elem a _ = False
 
 
 remove :: (Ord a) => a -> Set a -> Set a
-remove a s = maybe s id (queryRemove a s)
+remove a (queryRemove a -> Just s) = s
+remove a s = s
 
 
 union :: (Ord a) => Set a -> Set a -> Set a

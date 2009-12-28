@@ -1,5 +1,5 @@
 {-# LANGUAGE ViewPatterns, PatternGuards  #-}
-{-# LANGUAGE PackageImports, GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE PackageImports #-}
 {-# OPTIONS_GHC -fno-warn-overlapping-patterns #-}
 
 module Operations
@@ -11,7 +11,6 @@ import Ast
 
 import Data.Function ( fix )
 import Data.Maybe
-import qualified SimpleSet as S
 
 
 -- tree xforms {{{
@@ -45,6 +44,7 @@ substitute s x (ast . openScopeFor s -> Var _) = s
 
 
 leet, spliceLet, pushLet :: VarID -> Term -> Term -> Term
+
 leet x e@(ast -> Var _) t = spliceLet x e t
 leet x e t                = pushLet x e t
 
@@ -76,11 +76,11 @@ pushLet x e t = case ast (openScopeFor e t) of
 newName :: VarID -> Vars -> VarID
 newName v vs = head [ y' | n <- [ 0 .. ]
                          , let y' = v ++ show n
-                         , not (y' `S.elem` vs) ]
+                         , not (y' ^? vs) ]
 
 
 newNameIn :: VarID -> [Term] -> VarID
-newNameIn v = newName v . S.unions . map vars
+newNameIn v = newName v . unions . map vars
 
 
 alpha :: VarID -> VarID -> Term -> Term

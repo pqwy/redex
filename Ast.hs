@@ -3,17 +3,19 @@ module Ast
     , AST(..), ast
     , var, app, lam, fixLet
     , freeVars, freeIn, notFreeIn, vars, varIn
+    , (^+), (^?), (^<-), (^->), singleton, unions
     ) where
 
 
 import Prelude hiding ( elem )
 
-import SimpleSet
+import qualified SimpleSet as S
 
 
 type VarID = String
-type Vars = Set VarID
 type SpliceID = String
+
+type Vars = S.Set VarID
 
 
 data Term = Var_ VarID
@@ -40,31 +42,31 @@ vars (Let_ _ xs _ _ _) = xs
 
 
 freeIn, notFreeIn :: VarID -> Term -> Bool
-freeIn x t = x `elem` freeVars t
+freeIn x t = x ^? freeVars t
 notFreeIn x t = not (freeIn x t)
 
 varIn :: VarID -> Term -> Bool
-varIn x t = x `elem` vars t
+varIn x t = x ^? vars t
 
 
 var :: VarID -> Term
 var = Var_
 
 app :: Term -> Term -> Term
-app a b = App_ (freeVars a `union` freeVars b)
-               (vars a `union` vars b)
+app a b = App_ (freeVars a ^+ freeVars b)
+               (vars a ^+ vars b)
                a b
 
 lam :: VarID -> Term -> Term
-lam x m = Lam_ (x `remove` freeVars m)
-               (x `insert` vars m)
+lam x m = Lam_ (x ^<- freeVars m)
+               (x ^-> vars m)
                x m
 
 
 fixLet :: VarID -> Term -> Term -> Term
 fixLet x e m = Let_ nufree nuvars x e m
-    where nufree = x `remove` (freeVars e `union` freeVars m)
-          nuvars = x `insert` (vars e `union` vars m)
+    where nufree = x ^<- (freeVars e ^+ freeVars m)
+          nuvars = x ^-> (vars e ^+ vars m)
 
 
 
@@ -81,5 +83,26 @@ ast (App_ _ _ l r) = App l r
 ast (Lam_ _ _ x m) = Lam x m
 ast (Let_ _ _ x e m) = Let x e m
 
+
+
+
+singleton :: VarID -> Vars
+singleton = S.singleton
+
+unions :: [Vars] -> Vars
+unions = S.unions
+
+infixr 5 ^+
+(^+) :: Vars -> Vars -> Vars
+(^+) = S.union
+
+infixr 7 ^<-, ^->
+(^<-), (^->) :: VarID -> Vars -> Vars
+(^<-) = S.remove
+(^->) = S.insert
+
+infix 4 ^?
+(^?) :: VarID -> Vars -> Bool
+(^?) = S.elem
 
 

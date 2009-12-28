@@ -18,3 +18,4 @@ test2 = mapM_ print . take 50 . whnf2
 
 
 main = print (whnf2 problem3 !! 1000)
+
