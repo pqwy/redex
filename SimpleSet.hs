@@ -13,6 +13,11 @@ import Prelude hiding ( elem, null )
 import Data.List ( sort )
 
 
+cmp :: (Ord a) => a -> a -> Ordering
+cmp = flip compare
+
+
+
 newtype Set a = Set [a]
     deriving (Eq)
 
@@ -45,6 +50,11 @@ fromList = Set . nub' . sort
 insert :: (Ord a) => a -> Set a -> Set a
 insert a (Set s) = Set (doit s)
 
+    -- where doit [] = []
+    --       doit (x@(cmp a -> LT) : xs) = x : doit xs
+    --       doit s@((cmp a -> EQ) : _)  = s
+    --       doit s@((cmp a -> GT) : _)  = a : s
+
     where doit [] = [a]
           doit s@(x:xs) =
               case a `compare` x of
@@ -55,6 +65,11 @@ insert a (Set s) = Set (doit s)
 
 queryRemove :: (Ord a) => a -> Set a -> Maybe (Set a)
 queryRemove a (Set xs) = Set `fmap` doit xs
+
+    -- where doit [] = Nothing
+    --       doit (x@(cmp a -> LT) : xs) = (x:) `fmap` doit xs
+    --       doit ((cmp a -> EQ) : xs)   = Just xs
+    --       doit ((cmp a -> GT) : _)    = Nothing
 
     where doit [] = Nothing
           doit (x:xs) =
@@ -77,6 +92,12 @@ remove a s = s
 union :: (Ord a) => Set a -> Set a -> Set a
 union (Set a) (Set b) = Set (doit a b)
 
+    -- where doit [] bs = bs
+    --       doit as [] = as
+    --       doit (a:as)   ((cmp a -> EQ) : bs)   = a : doit as bs
+    --       doit as@(a:_) (b@(cmp a -> LT) : bs) = b : doit as bs
+    --       doit (a:as)   bs@((cmp a -> GT) : _) = a : doit as bs
+
     where doit [] bs = bs
           doit as [] = as
           doit a'@(a:as) b'@(b:bs) =
@@ -92,6 +113,11 @@ unions = foldr union empty
 
 intersection :: (Ord a) => Set a -> Set a -> Set a
 intersection (Set a) (Set b) = Set (doit a b)
+
+    -- where doit (a:as)   ((cmp a -> EQ) : bs)   = a : doit as bs
+    --       doit (a:as)   bs@((cmp a -> GT) : _) = doit as bs
+    --       doit as@(a:_) ((cmp a -> LT) : bs)   = doit as bs
+    --       doit _ _ = []
 
     where doit a'@(a:as) b'@(b:bs) =
               case a `compare` b of
@@ -110,4 +136,9 @@ subset (Set a) (Set b) = doit a b
                    EQ -> doit as bs
                    LT -> False
                    GT -> doit a' bs
+
+    -- where doit [] _ = True
+    --       doit as@(a:_) ((cmp a -> LT) : bs) = doit as bs
+    --       doit (a:as)   ((cmp a -> EQ) : bs) = doit as bs
+    --       doit (a:_)    ((cmp a -> GT) : _)  = False
 

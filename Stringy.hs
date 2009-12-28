@@ -97,7 +97,7 @@ showsLam (ast -> App l r) =
     . (' ' :) . bracketComposite r
 
 showsLam (ast -> Lam x t) =
-    ('\\' :) . (x ++)
+    ('|' :) . (x ++)
     . fix ( \f t -> case ast t of
                 Lam x t' -> (x ++) . f t'
                 _        -> ('.' :) . showsLam t ) t

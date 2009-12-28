@@ -42,6 +42,7 @@ whnf beta t@(ast -> Lam _ _) = pure t
 
 whnf beta t@(ast -> Var x) =
     pure t <|> (resolve x >>= whnf beta >>= \t' -> assert x t' *> pure t')
+    -- (resolve x >>= whnf beta >>= \t' -> assert x t' *> pure t')
 
 -- }}}
 
@@ -53,8 +54,10 @@ newtype Reduceron a = Red { reduce_ :: StateT Env (ListT Identity) a }
     deriving (Functor, Monad, MonadState Env, Applicative, Alternative)
 
 
-reduce :: Reduceron a -> Env -> [a]
-reduce r e = runIdentity $ runListT (reduce_ r `evalStateT` e)
+-- reduce :: Reduceron a -> Env -> [a]
+-- reduce r e = runIdentity $ runListT (reduce_ r `evalStateT` e)
+reduce :: Reduceron a -> [a]
+reduce r = runIdentity $ runListT (reduce_ r `evalStateT` noenv)
 
 noenv = [] :: Env
 
@@ -77,9 +80,12 @@ assert x t = modify (mod' x t)
 -- }}}
 
 
-whnf1, whnf2 :: Term -> [Term]
-whnf1 t = whnf splicingBeta t `reduce` noenv
-whnf2 t = whnf lazyBeta t `reduce` noenv
+-- whnf1, whnf2 :: Term -> [Term]
+-- whnf1 t = whnf splicingBeta t `reduce` noenv
+-- whnf2 t = whnf lazyBeta t `reduce` noenv
 
+whnf1, whnf2 :: Term -> [Term]
+whnf1 t = reduce (whnf splicingBeta t)
+whnf2 t = reduce (whnf lazyBeta t)
 
 -- vim:set fdm=marker:

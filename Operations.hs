@@ -65,14 +65,14 @@ pushLet x e t = case scrubFor e t of
                           | x `notFreeIn` b = f (pushLet x e a) b
                           | otherwise = fixLet x e t
 
+
 -- }}}
 
 -- abvgd {{{
 
 newName :: VarID -> Vars -> VarID
 newName v vs = head [ y' | n <- [ 0 .. ]
-                         , let y' = v ++ show n
-                         , not (y' ^? vs) ]
+                         , let y' = v ++ show n , not (y' ^? vs) ]
 
 
 newNameIn :: VarID -> [Term] -> VarID
