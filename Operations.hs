@@ -15,32 +15,28 @@ import Data.Maybe
 
 -- tree xforms {{{
 
-openScopeFor :: Term -> Term -> Term
+scrubFor :: Term -> Term -> AST
 
-openScopeFor t2 t@(ast -> Lam x m)
-    | x `notFreeIn` t2 = t
-    | otherwise = let x' = x `newNameIn` [m, t2] in lam x' (alpha x x' m)
+scrubFor t2 t@(ast -> Lam x m)
+    | x `freeIn` t2 = let x' = x `newNameIn` [m, t2] in Lam x' (alpha x x' m)
 
-openScopeFor t2 t@(ast -> Let x e m)
-    | x `notFreeIn` t2 = t
-    | otherwise = let x' = x `newNameIn` [e, m, t2]
-                  in fixLet x' (alpha x x' e) (alpha x x' m)
+scrubFor t2 t@(ast -> Let x e m)
+    | x `freeIn` t2 = let x' = x `newNameIn` [e, m, t2]
+                      in Let x' (alpha x x' e) (alpha x x' m)
 
-openScopeFor t2 t = t
-
+scrubFor t2 (ast -> t) = t
 
 
 substitute :: Term -> VarID -> Term -> Term
 substitute s x t | x `notFreeIn` t = t
 
-substitute s x (ast . openScopeFor s -> App a b) =
+substitute s x (scrubFor s -> App a b) =
     app (substitute s x a) (substitute s x b)
-substitute s x (ast . openScopeFor s -> Lam y m) =
+substitute s x (scrubFor s -> Lam y m) =
     lam y (substitute s x m)
-substitute s x (ast . openScopeFor s -> Let y e m) =
+substitute s x (scrubFor s -> Let y e m) =
     fixLet y (substitute s x e) (substitute s x m)
-substitute s x (ast . openScopeFor s -> Var _) = s
-
+substitute s x (scrubFor s -> Var _) = s
 
 
 leet, spliceLet, pushLet :: VarID -> Term -> Term -> Term
@@ -50,14 +46,14 @@ leet x e t                = pushLet x e t
 
 
 spliceLet x e t | x `notFreeIn` t = t
-spliceLet x e (ast -> App a b)    = app (spliceLet x e a) (spliceLet x e b)
-spliceLet x e (ast -> Let y e1 m) = fixLet y (spliceLet x e e1) (spliceLet x e m)
-spliceLet x e (ast -> Lam y m)    = lam y (spliceLet x e m)
-spliceLet x e (ast -> Var _)      = e
+spliceLet x e (ast -> App a b    )  = app (spliceLet x e a) (spliceLet x e b)
+spliceLet x e (ast -> Let y e1 m )  = fixLet y (spliceLet x e e1) (spliceLet x e m)
+spliceLet x e (ast -> Lam y m    )  = lam y (spliceLet x e m)
+spliceLet x e (ast -> Var _      )  = e
 
 
 pushLet x e t | x `notFreeIn` t = t
-pushLet x e t = case ast (openScopeFor e t) of
+pushLet x e t = case scrubFor e t of
 
         App a b              -> bifurcate app a b
         Let y e1 m           -> bifurcate (fixLet y) e1 m
@@ -85,12 +81,10 @@ newNameIn v = newName v . unions . map vars
 
 alpha :: VarID -> VarID -> Term -> Term
 alpha x y t | x `notFreeIn` t = t
-            | otherwise =
-                case ast t of
-                     App a b    -> app (alpha x y a) (alpha x y b)
-                     Lam x' m   -> lam x' (alpha x y m)
-                     Let x' e m -> fixLet x' (alpha x y e) (alpha x y m)
-                     Var _      -> var y
+alpha x y (ast -> App a b    ) = app (alpha x y a) (alpha x y b)
+alpha x y (ast -> Lam x' m   ) = lam x' (alpha x y m)
+alpha x y (ast -> Let x' e m ) = fixLet x' (alpha x y e) (alpha x y m)
+alpha x y (ast -> Var _      ) = var y
 
 
 splicingBeta, lazyBeta :: Term -> Term -> Term
@@ -100,8 +94,8 @@ splicingBeta _ _ = error "splicingBeta: lambda?"
 
 lazyBeta (ast -> Lam x m) t
         | x `notFreeIn` t = leet x t m
-        | otherwise = let x' = x `newNameIn` [m, t]
-                      in leet x' t (alpha x x' m)
+        | otherwise       = leet x' t (alpha x x' m)
+    where x' = x `newNameIn` [m, t]
 lazyBeta _ _ = error "lazyBeta: lambda?"
 
 -- }}}
