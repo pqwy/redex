@@ -3,6 +3,7 @@ import Ast
 import Stringy
 import Operations
 import Reductions
+import Primitives
 
 
 problem1, problem2, problem3, problem4 :: Term
@@ -46,12 +47,12 @@ globok =
     \     (iszero = λn.n (K false) true)         \
 \ "
 
-exp1, exp2, exp3, exp4 :: Term
+exp1, exp2, exp3, exp4, exp5 :: Term
 exp1 = read (globok ++ "iszero zero Y N")
 exp2 = read (globok ++ "iszero (sub1 (sub1 (sub1 (add1 (add1 (add1 zero)))))) Y N")
 exp3 = read (globok ++ "iszero (plus (add1 (add1 (add1 (add1 zero)))) (add1 (add1 zero))) Y N")
 exp4 = read (globok ++ "iszero (minus zero zero) Y N")
--- exp4 = read (globok ++ "(λn.iszero )(plus (add1 (add1 (add1 (add1 zero)))) (add1 (add1 zero))) Y N")
+exp5 = read (globok ++ "(λn.iszero (minus n n)) (plus (add1 (add1 (add1 (add1 zero)))) (add1 (add1 zero))) Y N")
 
 backtrack1 :: Term
 backtrack1 = read "(let (K = |xy.x) (let (zero = |fx.x) zero (|nfx.n (|gh.h (g f)) (K x) (|x.x)) zero) (K (|ab.b))) (|ab.a) Y N"

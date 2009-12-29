@@ -8,6 +8,7 @@ module Stringy
 
 import Ast
 import Operations
+import Primitives
 
 import Data.Function
 
@@ -25,12 +26,16 @@ bracketed :: Parser a -> Parser a
 bracketed p = char '(' *> spaces *> p <* spaces <* char ')'
 -- bracketed p = try (char '(' *> spaces) *> p <* spaces <* char ')'
 
+nonWS :: Parser String
+nonWS = many1 (noneOf " \t\n")
+
 
 parseTerm, parseSingleTerm, parseLam, parseVar, parseLet :: Parser Term
 
 parseTerm = foldl1 app <$> many1 (parseSingleTerm <* spaces <?> "term")
 
-parseSingleTerm = bracketed parseTerm <|> parseLam <|> parseLet <|> parseVar
+parseSingleTerm = bracketed parseTerm <|> parseLam <|> parseLet
+              <|> parseNum <|> try parsePrimOp <|> parseVar
 
 lambda = oneOf "\\|λ"
 
@@ -39,6 +44,13 @@ parseLam = do
     spaces *> (flip (foldr lam) vars <$> parseTerm)
 
 parseVar = var <$> largeVar
+
+parseNum = prim . num . read <$> many1 digit <?> "numeral"
+
+parsePrimOp = nonWS >>= \tok ->
+                case lookup tok prims of
+                     Nothing -> fail "unknown op"
+                     Just p  -> pure (prim p)
 
 parseLet = flip (foldr (uncurry leet))
        <$> (try (string "let") *> spaces *> many1 (try (binder <* spaces)))
@@ -84,8 +96,10 @@ instance Read Term where
 
 bracketComposite, showsLam :: Term -> ShowS
 
-bracketComposite t@(ast -> Var _) = showsLam t
-bracketComposite t                = showParen True (showsLam t)
+bracketComposite t@(ast -> Var _)    = showsLam t
+bracketComposite t@(ast -> Prim _)   = showsLam t
+bracketComposite t@(ast -> Mark _ _) = showsLam t
+bracketComposite t                   = showParen True (showsLam t)
 
 
 showsLam (ast -> Var x) = showString x
@@ -109,6 +123,13 @@ showsLam t@(ast -> Let _ _ _) =
                 _          -> showsLam t ) t
 
     where binder x e = showParen True ( ((x ++ " = ") ++) . showsLam e ) . (' ' :)
+
+showsLam (ast -> Prim p) = showPrimRep (primrep p)
+    where showPrimRep = (++)
+
+showsLam (ast -> Mark Nothing t) = (" [ "++) . showsLam t . (" ] "++)
+showsLam (ast -> Mark (Just s) t) =
+    ((" [ " ++ s ++ ": ")++) . showsLam t . (" ] "++)
 
 
 instance Show Term where

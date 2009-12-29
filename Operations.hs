@@ -37,6 +37,8 @@ substitute s x (scrubFor s -> Lam y m) =
 substitute s x (scrubFor s -> Let y e m) =
     fixLet y (substitute s x e) (substitute s x m)
 substitute s x (scrubFor s -> Var _) = s
+substitute s x (scrubFor s -> Mark t m) =
+    markWith t (substitute s x m)
 
 
 leet, pushLet :: VarID -> Term -> Term -> Term
@@ -51,6 +53,7 @@ pushLet x e t = case scrubFor e t of
         App a b              -> bifurcate app a b
         Let y e1 m           -> bifurcate (fixLet y) e1 m
         Lam y m              -> lam y (pushLet x e m)
+        Mark t m             -> markWith t (pushLet x e m)
         Var _ | x `freeIn` e -> fixLet x e t
               | otherwise    -> e
 
@@ -78,6 +81,7 @@ alpha x y (ast -> App a b    ) = app (alpha x y a) (alpha x y b)
 alpha x y (ast -> Lam x' m   ) = lam x' (alpha x y m)
 alpha x y (ast -> Let x' e m ) = fixLet x' (alpha x y e) (alpha x y m)
 alpha x y (ast -> Var _      ) = var y
+alpha x y (ast -> Mark t m   ) = markWith t (alpha x y m)
 
 
 splicingBeta, lazyBeta :: Term -> Term -> Term

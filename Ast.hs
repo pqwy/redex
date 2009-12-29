@@ -1,9 +1,10 @@
 module Ast
     ( Term, VarID, Vars, SpliceID
     , AST(..), ast
-    , var, app, lam, fixLet
+    , var, app, lam, fixLet, prim, mark, markWith
     , freeVars, freeIn, notFreeIn, vars, varIn
-    , (^+), (^?), (^<-), (^->), singleton, unions
+    , (^+), (^?), (^<-), (^->), noVars, singleton, unions
+    , PrimRep, Primitive(..), arity, primrep, combineRep, num
     ) where
 
 
@@ -22,6 +23,8 @@ data Term = Var_ VarID
           | App_ Vars Vars Term Term
           | Lam_ Vars Vars VarID Term
           | Let_ Vars Vars VarID Term Term
+          | Prim_ Primitive
+          | Mark_ (Maybe String) Term
           -- | Splice_ Vars Vars Vars SpliceID
     -- deriving (Show, Eq)
     deriving (Eq)
@@ -32,6 +35,8 @@ freeVars (Var_ x) = singleton x
 freeVars (App_ xs _ _ _) = xs
 freeVars (Lam_ xs _ _ _) = xs
 freeVars (Let_ xs _ _ _ _) = xs
+freeVars (Prim_ _) = noVars
+freeVars (Mark_ _ t) = freeVars t
 -- freeVars (Splice_ xs _ _) = xs
 
 vars :: Term -> Vars
@@ -39,6 +44,8 @@ vars (Var_ x) = singleton x
 vars (App_ _ xs _ _) = xs
 vars (Lam_ _ xs _ _) = xs
 vars (Let_ _ xs _ _ _) = xs
+vars (Prim_ _) = noVars
+vars (Mark_ _ t) = vars t
 
 
 freeIn, notFreeIn :: VarID -> Term -> Bool
@@ -69,12 +76,23 @@ fixLet x e m = Let_ nufree nuvars x e m
           nuvars = x ^-> (vars e ^+ vars m)
 
 
+prim :: Primitive -> Term
+prim = Prim_
+
+
+mark :: Term -> Term
+mark = Mark_ Nothing
+
+markWith :: Maybe String -> Term -> Term
+markWith = Mark_
 
 
 data AST = Var VarID
          | App Term Term
          | Lam VarID Term
          | Let VarID Term Term
+         | Prim Primitive
+         | Mark (Maybe String) Term
 
 
 ast :: Term -> AST
@@ -82,9 +100,13 @@ ast (Var_ x) = Var x
 ast (App_ _ _ l r) = App l r
 ast (Lam_ _ _ x m) = Lam x m
 ast (Let_ _ _ x e m) = Let x e m
+ast (Prim_ p) = Prim p
+ast (Mark_ s t) = Mark s t
 
 
 
+noVars :: Vars
+noVars = S.empty
 
 singleton :: VarID -> Vars
 singleton = S.singleton
@@ -104,5 +126,43 @@ infixr 7 ^<-, ^->
 infix 4 ^?
 (^?) :: VarID -> Vars -> Bool
 (^?) = S.elem
+
+
+data Primitive = Num Int
+               | NumOp (Int -> Int) PrimRep
+               | NumBinOp (Int -> Int -> Int) PrimRep
+
+
+type PrimRep = String
+
+
+instance Eq Primitive where
+    Num x == Num y = x == y
+    NumOp _ r1 == NumOp _ r2 = r1 == r2
+    NumBinOp _ r1 == NumBinOp _ r2 = r1 == r2
+    _ == _ = False
+
+instance Show Primitive where
+    show (Num n) = show n
+    show (NumOp _ r) = r
+    show (NumBinOp _ r) = r
+
+arity :: Primitive -> Int
+arity (NumOp _ _) = 1
+arity (NumBinOp _ _) = 2
+arity _ = 0
+
+
+primrep :: Primitive -> PrimRep
+primrep (Num n) = show n
+primrep (NumOp _ r) = r
+primrep (NumBinOp _ r) = r
+
+
+combineRep :: PrimRep -> PrimRep -> PrimRep
+combineRep a b = a ++ ' ' : b
+
+num :: Int -> Primitive
+num = Num
 
 
