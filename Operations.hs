@@ -4,7 +4,7 @@
 
 module Operations
     ( substitute, leet
-    , alpha, lazyBeta, splicingBeta
+    , alpha, lazyBeta, splicingBeta, pushLet
     ) where
 
 import Ast
@@ -39,17 +39,10 @@ substitute s x (scrubFor s -> Let y e m) =
 substitute s x (scrubFor s -> Var _) = s
 
 
-leet, spliceLet, pushLet :: VarID -> Term -> Term -> Term
+leet, pushLet :: VarID -> Term -> Term -> Term
 
-leet x e@(ast -> Var _) t = spliceLet x e t
+leet x e@(ast -> Var _) t = substitute e x t
 leet x e t                = pushLet x e t
-
-
-spliceLet x e t | x `notFreeIn` t = t
-spliceLet x e (ast -> App a b    )  = app (spliceLet x e a) (spliceLet x e b)
-spliceLet x e (ast -> Let y e1 m )  = fixLet y (spliceLet x e e1) (spliceLet x e m)
-spliceLet x e (ast -> Lam y m    )  = lam y (spliceLet x e m)
-spliceLet x e (ast -> Var _      )  = e
 
 
 pushLet x e t | x `notFreeIn` t = t
