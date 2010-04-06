@@ -90,16 +90,17 @@ instance Read Term where
     readsPrec _ = either (const []) (:[]) . parse p "<literal>"
         where p = spaces *> ((,) <$> parseTerm <*> getInput)
 
+
 -- }}}
 
 -- out {{{
 
-bracketComposite, showsLam :: Term -> ShowS
+bracketIfComposite, showsLam :: Term -> ShowS
 
-bracketComposite t@(ast -> Var _)    = showsLam t
-bracketComposite t@(ast -> Prim _)   = showsLam t
-bracketComposite t@(ast -> Mark _ _) = showsLam t
-bracketComposite t                   = showParen True (showsLam t)
+bracketIfComposite t@(ast -> Var _)    = showsLam t
+bracketIfComposite t@(ast -> Prim _)   = showsLam t
+bracketIfComposite t@(ast -> Mark _ _) = showsLam t
+bracketIfComposite t                   = showParen True (showsLam t)
 
 
 showsLam (ast -> Var x) = showString x
@@ -107,8 +108,8 @@ showsLam (ast -> Var x) = showString x
 showsLam (ast -> App l r) =
     ( case ast l of
            App _ _ -> showsLam l
-           _       -> bracketComposite l )
-    . (' ' :) . bracketComposite r
+           _       -> bracketIfComposite l )
+    . (' ' :) . bracketIfComposite r
 
 showsLam (ast -> Lam x t) =
     ('|' :) . (x ++)

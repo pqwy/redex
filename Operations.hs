@@ -12,6 +12,7 @@ import Ast
 import Data.Function ( fix )
 import Data.Maybe
 
+import Data.Char ( isDigit )
 
 -- tree xforms {{{
 
@@ -38,13 +39,13 @@ substitute s x (scrubFor s -> Let y e m) =
     fixLet y (substitute s x e) (substitute s x m)
 substitute s x (scrubFor s -> Var _) = s
 substitute s x (scrubFor s -> Mark t m) =
-    markWith t (substitute s x m)
+    mark t (substitute s x m)
 
 
 leet, pushLet :: VarID -> Term -> Term -> Term
 
-leet x e@(ast -> Var _) t = substitute e x t
-leet x e t                = pushLet x e t
+leet x e@(ast -> Var y) t | x /= y = substitute e x t
+leet x e t                         = pushLet x e t
 
 
 pushLet x e t | x `notFreeIn` t = t
@@ -53,7 +54,7 @@ pushLet x e t = case scrubFor e t of
         App a b              -> bifurcate app a b
         Let y e1 m           -> bifurcate (fixLet y) e1 m
         Lam y m              -> lam y (pushLet x e m)
-        Mark t m             -> markWith t (pushLet x e m)
+        Mark t m             -> mark t (pushLet x e m)
         Var _ | x `freeIn` e -> fixLet x e t
               | otherwise    -> e
 
@@ -66,7 +67,9 @@ pushLet x e t = case scrubFor e t of
 
 -- abvgd {{{
 
+-- XXX want smarter renaming-renaming-renaming
 newName :: VarID -> Vars -> VarID
+newName (v:x:[]) vs | isDigit x = newName [v] vs
 newName v vs = head [ y' | n <- [ 0 .. ]
                          , let y' = v ++ show n , not (y' ^? vs) ]
 
@@ -81,7 +84,7 @@ alpha x y (ast -> App a b    ) = app (alpha x y a) (alpha x y b)
 alpha x y (ast -> Lam x' m   ) = lam x' (alpha x y m)
 alpha x y (ast -> Let x' e m ) = fixLet x' (alpha x y e) (alpha x y m)
 alpha x y (ast -> Var _      ) = var y
-alpha x y (ast -> Mark t m   ) = markWith t (alpha x y m)
+alpha x y (ast -> Mark t m   ) = mark t (alpha x y m)
 
 
 splicingBeta, lazyBeta :: Term -> Term -> Term
@@ -89,11 +92,10 @@ splicingBeta, lazyBeta :: Term -> Term -> Term
 splicingBeta (ast -> Lam x m) t = substitute t x m
 splicingBeta _ _ = error "splicingBeta: lambda?"
 
-lazyBeta (ast -> Lam x m) t
-        | x `notFreeIn` t = leet x t m
-        | otherwise       = leet x' t (alpha x x' m)
-    where x' = x `newNameIn` [m, t]
-lazyBeta _ _ = error "lazyBeta: lambda?"
+lazyBeta = flip lazyBeta'
+
+lazyBeta' t (scrubFor t -> Lam x m) = leet x t m
+lazyBeta' _ _ = error "lazyBeta: lambda?"
 
 -- }}}
 
