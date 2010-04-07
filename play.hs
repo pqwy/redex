@@ -9,6 +9,7 @@ import Operations
 import Reductions
 import Primitives
 import Graphs
+-- import Typer
 
 import System.Environment
 
