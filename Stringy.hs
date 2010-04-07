@@ -12,10 +12,10 @@ import Primitives
 
 import Data.Function
 
-import Text.Parsec
-import Text.Parsec.String
+import Text.ParserCombinators.Parsec
+-- import Text.Parsec.String
 
-import Text.Parsec.Error ( Message(..), errorMessages )
+import Text.ParserCombinators.Parsec.Error ( Message(..), errorMessages )
 
 import Control.Monad
 import Control.Applicative hiding ( Alternative(..), many )
@@ -83,13 +83,20 @@ parseLambdaOrValidatePrefix n s =
                 | otherwise       -> Left e
          r                        -> Just <$> r
 
-unexpectedEOF = any (== SysUnExpect "") . errorMessages
+unexpectedEOF = any unexpected . errorMessages
+    where
+        unexpected (SysUnExpect "") = True
+        unexpected _                = False
 
 
 instance Read Term where
     readsPrec _ = either (const []) (:[]) . parse p "<literal>"
         where p = spaces *> ((,) <$> parseTerm <*> getInput)
 
+
+instance Applicative (GenParser t s) where
+    pure  = return
+    (<*>) = ap
 
 -- }}}
 
