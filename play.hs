@@ -44,13 +44,14 @@ anTest r | length run == 1000 = mapM_ print (take 50 run) >> putStrLn "\n** LOOP
     where run = take 1000 r
 
 
-main = do
-    a : n : _ <- getArgs
-    let fun = case a of "one" -> whnf1
-                        "two" -> whnf2
-                        "thr" -> whnf3
-                        "fou" -> whnf4 
-    print $ (rnf `headWin` fun problem3) !! (read n)
+main = undefined
+-- main = do
+--     a : n : _ <- getArgs
+--     let fun = case a of "one" -> whnf1
+--                         "two" -> whnf2
+--                         "thr" -> whnf3
+--                         "fou" -> whnf4 
+--     print $ (rnf `headWin` fun problem3) !! (read n)
 
 
 globok =
