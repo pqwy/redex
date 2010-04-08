@@ -62,7 +62,7 @@ globok =
     \     (S = λfgx.f x (g x))                                  \
 
     \     (Y1 = λf.(λu.f(u u)) λu.f(u u))                       \
-    \     (Y2 = let (A = λxy.y (x x y)) A A)                    \
+    \     (Y2 = (λuf.f (u u f)) λuf.f (u u f)                   \
     \     (Y3 = let                                             \
     \           (L = λabcdefghijklmnopqstuvwxyzr.r(t h i s i s a f i x e d p o i n t c o m b i n a t o r))   \
     \           L L L L L L L L L L L L L L L L L L L L L L L L L L)    \

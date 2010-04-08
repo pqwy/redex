@@ -11,9 +11,8 @@ import Ast hiding ( unions )
 import Stringy
 
 import Data.List ( intercalate, (\\), union )
-import Control.Category ( (<<<), (>>>) )
-import "mtl" Control.Monad.State
-import "mtl" Control.Monad.Error
+import "transformers" Control.Monad.Trans.State
+import "monads-fd" Control.Monad.Error
 import Control.Applicative
 
 
@@ -44,7 +43,7 @@ substitute s (Arrow t1 t2) = Arrow (substitute s t1) (substitute s t2)
 substitute s (TyCon k ts)  = TyCon k (map (substitute s) ts)
 
 extend' :: Ident -> Type -> (Type -> Type) -> Type -> Type
-extend' x t s ty@(TyVar y) | x == y    = extend' x t s t
+extend' x t s ty@(TyVar y) | x   == y  = extend' x t s t
                            | ty' == ty = ty
                            | otherwise = extend' x t s ty'
                     where ty' = s ty
@@ -52,7 +51,12 @@ extend' x t s (Arrow t1 t2) = Arrow (extend' x t s t1) (extend' x t s t2)
 extend' x t s (TyCon k ts)  = TyCon k (map (extend' x t s) ts)
 
 
-data TypeScheme = Scheme [Ident] Type deriving (Show)
+data TypeScheme = Scheme [Ident] Type
+
+instance Show TypeScheme where
+    show (Scheme [] t) = show t
+    show (Scheme as t) = "forall " ++ intercalate " " as ++ ". " ++ show t
+
 
 newtype T a = T (StateT Int (Either String) a)
     deriving (Functor, Monad, MonadError String)
@@ -64,13 +68,17 @@ instance Applicative T where
     pure = return
     (<*>) = ap
 
+($>) :: (Applicative f) => f a -> (a -> b) -> f b
+infix 4 $>
+a $> f = f <$> a
+
+
 newTyVar :: T Type
-newTyVar = TyVar <$> T (get >>= \x -> put (x+1) >> return ("a_" ++ show x))
+newTyVar = TyVar <$> T (get >>= \x -> ("a_" ++ show x) <$ put (x+1))
 
 newInstance :: TypeScheme -> T Type
 newInstance (Scheme ids ty) =
-    substitute <$> foldM (\s id -> newTyVar >>=
-                            \v -> return (extend id v s))
+    substitute <$> foldM (\s id -> newTyVar $> \v -> extend id v s)
                          emptySubst ids
                <*> pure ty
 
@@ -95,24 +103,22 @@ generalize :: TypeEnv -> Type -> TypeScheme
 generalize e t = Scheme (tyVars t \\ envTyVars e) t
 
 
-
-
 mgu :: Type -> Type -> Subst -> T Subst
 
-mgu (TyVar a) (TyVar b) s | a == b = return s
-mgu (TyVar a) u s         | not (a `elem` tyVars u) = return (extend a u s)
-                          | otherwise =
-                throwError ( "Occurs check: cannot construct the infinite type: "
-                                ++ a ++ " = " ++ show (s `substitute` u) )
-mgu t u@(TyVar _) s = mgu u t s
+mgu t u s = case (s `substitute` t, s `substitute` u) of
 
-mgu (Arrow t1 t2) (Arrow u1 u2) s = (mgu t1 u1 >=> mgu t2 u2) s
+         ((TyVar a), (TyVar b)) | a == b -> return s
+         ((TyVar a), u')        | not (a `elem` tyVars u') -> return (extend a u' s)
+                                | otherwise ->
+                        throwError ( "Occurs check: cannot construct the infinite type: "
+                                        ++ a ++ " = " ++ show u' )
+         (t, u'@(TyVar _)) -> mgu u' t s
 
-mgu (TyCon a as) (TyCon b bs) s | a == b = foldM (flip id) s (zipWith mgu as bs)
+         ((Arrow t1 t2), (Arrow u1 u2)) -> (mgu t1 u1 >=> mgu t2 u2) s
 
-mgu t u s = throwError ( "cannot unify " ++ show (s `substitute` t)
-                              ++ "with " ++ show (s `substitute` u) )
+         ((TyCon a as), (TyCon b bs)) | a == b -> foldM (flip id) s (zipWith mgu as bs)
 
+         (t', u') -> throwError ( "cannot unify " ++ show t' ++ " with " ++ show u' )
 
 
 tp :: TypeEnv -> Term -> Type -> Subst -> T Subst
@@ -125,8 +131,8 @@ tp env (ast -> Var x) ty s =
 tp env (ast -> Lam x e1) ty s =
     do a <- newTyVar
        b <- newTyVar
-       let env' = (x, Scheme [] a) : env
-       (mgu ty (Arrow a b) >=> tp env' e1 b) s
+       (mgu ty (Arrow a b) >=>
+           tp ((x, Scheme [] a) : env) e1 b) s
     
 tp env (ast -> App e1 e2) ty s =
     do a <- newTyVar
@@ -137,40 +143,59 @@ tp env (ast -> App e1 e2) ty s =
 --        s1 <- tp env e1 a s
 --        tp ((x, generalize env (s1 `substitute` a)) : env) e2 ty s1
 
+tp env (ast -> Let x e1 e2) ty s =
+    do a  <- newTyVar
+       s1 <- tp ((x, Scheme [] a) : env) e1 a s
+       tp ((x, generalize env (s1 `substitute` a)) : env)
+          e2 ty s1
 
-    
-typeOf :: TypeEnv -> Term -> Either String Type
+
+typeOf :: TypeEnv -> Term -> Either String TypeScheme
 typeOf env expr = runT
     ( newTyVar >>= \a ->
-        (`substitute` a) <$> tp env expr a emptySubst )
+        tp env expr a emptySubst $>
+            generalize env . (`substitute` a) )
 
 
 
--- predefEnv = [ (tc, generalize [] t) | (tc, t) <- env ]
---     where
---         boolean = TyCon "Bool" []
---         int     = TyCon "Int"  []
---         list a  = TyCon "List" [a]
--- 
---         a = TyVar "t"
--- 
---         infixr 9 ~>
---         (~>) = Arrow
--- 
---         env = [ ("true"    , boolean)
---               , ("false"   , boolean)
---               , ("if"      , boolean ~> a ~> a ~> a)
---               , ("zero"    , int)
---               , ("succ"    , int ~> int)
---               , ("nil"     , list a)
---               , ("cons"    , a ~> list a ~> list a)
---               , ("isEmpty" , list a ~> boolean)
---               , ("head"    , list a ~> a)
---               , ("tail"    , list a ~> list a)
---               , ("fix"     , (a ~> a) ~> a) ]
+predefEnv = [ (tc, generalize [] t) | (tc, t) <- env ]
+    where
+        bool   = TyCon "Bool" []
+        int    = TyCon "Int"  []
+        list a = TyCon "List" [a]
+        type_  = TyCon "T" []
+
+        a = TyVar "t"
+
+        infixr 9 ~>
+        (~>) = Arrow
+
+        env = [ ( "true"      , bool                    )
+              , ( "false"     , bool                    )
+              , ( "if"        , bool ~> a ~> a ~> a     )
+              , ( "zero"      , int                     )
+              , ( "succ"      , int ~> int              )
+              , ( "nil"       , list a                  )
+              , ( "isNil"     , list a ~> bool          )
+              , ( "cons"      , a ~> list a ~> list a   )
+              , ( "isEmpty"   , list a ~> bool          )
+              , ( "head"      , list a ~> a             )
+              , ( "tail"      , list a ~> list a        )
+              , ( "fix"       , (a ~> a) ~> a           )
+              , ( "undefined" , a                       )
+              , ( "bop"       , type_ ~> type_ ~> type_ )
+              , ( "unop"      , type_ ~> type_          )
+              , ( "con"       , type_                   )
+              ]
 
 
--- testExp = lam "x" ((var "cons" `app` var "x") `app` var "nil")
+letMap  = "let ( map = |fx.if (isNil x) nil (cons (f (head x)) (map f (tail x))) ) "
+letZip  = "let ( zip = |fxy.if (isNil x) nil (if (isNil y) nil (cons (f (head x) (head y)) (zip f (tail x) (tail y)))) )"
+letZip' = "let ( zip = fix (|zfxy.if (isNil x) nil (if (isNil y) nil (cons (f (head x) (head y)) (z f (tail x) (tail y))))) ) "
+
+
+expn :: [Term]
+expn = map read [ "|x.cons x nil" ]
 
 
 
