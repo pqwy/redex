@@ -1,5 +1,5 @@
 module Ast
-    ( Term, VarID, Vars, SpliceID
+    ( Term, VarID, Vars
     , AST(..), ast
     , var, app, lam, fixLet, prim, mark, mark', markS
     , freeVars, freeIn, notFreeIn, vars, varIn
@@ -14,7 +14,6 @@ import qualified SimpleSet as S
 
 
 type VarID = String
-type SpliceID = String
 
 type Vars = S.Set VarID
 
@@ -25,7 +24,6 @@ data Term = Var_ VarID
           | Let_ Vars Vars VarID Term Term
           | Prim_ Primitive
           | Mark_ (Maybe String) Term
-          -- | Splice_ Vars Vars Vars SpliceID
     -- deriving (Show, Eq)
     deriving (Eq)
 
@@ -37,7 +35,6 @@ freeVars (Lam_ xs _ _ _) = xs
 freeVars (Let_ xs _ _ _ _) = xs
 freeVars (Prim_ _) = noVars
 freeVars (Mark_ _ t) = freeVars t
--- freeVars (Splice_ xs _ _) = xs
 
 vars :: Term -> Vars
 vars (Var_ x) = singleton x
@@ -50,21 +47,11 @@ vars (Mark_ _ t) = vars t
 
 freeIn, notFreeIn :: VarID -> Term -> Bool
 freeIn x t = x ^? freeVars t
--- freeIn x (Lam_ _ _ y m) = not (x == y) && x `freeIn` m
--- freeIn x (App_ _ _ a b) = x `freeIn` a || x `freeIn` b
--- freeIn x (Let_ _ _ y e m) = not (x == y) && (x `freeIn` e || x `freeIn` m)
--- freeIn x (Var_ y) = x == y
--- freeIn x (Mark_ _ e) = x `freeIn` e
 
 notFreeIn x t = not (freeIn x t)
 
 varIn :: VarID -> Term -> Bool
 varIn x t = x ^? vars t
--- varIn x (Lam_ _ _ y m) = x == y || x `freeIn` m
--- varIn x (App_ _ _ a b) = x `varIn` a || x `varIn` b
--- varIn x (Let_ _ _ y e m) = x == y || x `varIn` e || x `varIn` m
--- varIn x (Var_ y) = x == y
--- varIn x (Mark_ _ e) = x `varIn` e
 
 
 var :: VarID -> Term
