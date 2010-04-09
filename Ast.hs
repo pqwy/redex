@@ -1,5 +1,5 @@
 module Ast
-    ( Term, Ident, Vars
+    ( Term, Ident(..), Vars
     , AST(..), ast
     , var, app, lam, fixLet, prim, mark, mark', markS
     , freeVars, freeIn, notFreeIn, vars, varIn
@@ -13,8 +13,13 @@ import Prelude hiding ( elem )
 import qualified SimpleSet as S
 
 
-type Ident = String
+-- type Ident = String
+data Ident = ID String | IDD String Int
+    deriving (Eq, Ord)
 
+instance Show Ident where
+    show (ID x)    = x
+    show (IDD x n) = x ++ "__" ++ show n
 
 type Vars = S.Set Ident
 

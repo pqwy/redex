@@ -16,14 +16,12 @@ import "monads-fd" Control.Monad.Error
 import Control.Applicative
 
 
-type Ident = String
-
-data Type = TyVar Ident | Arrow Type Type | TyCon Ident [Type]
+data Type = TyVar Ident | Arrow Type Type | TyCon String [Type]
     deriving (Eq)
 
 
 instance Show Type where
-    show (TyVar x)     = x
+    show (TyVar x)     = show x
     show (Arrow t1 t2) = "(" ++ show t1 ++ " -> " ++ show t2 ++ ")"
     show (TyCon c [])  = c
     show (TyCon c ts)  = c ++ " " ++ intercalate " " (map show ts)
@@ -55,14 +53,16 @@ data TypeScheme = Scheme [Ident] Type
 
 instance Show TypeScheme where
     show (Scheme [] t) = show t
-    show (Scheme as t) = "forall " ++ intercalate " " as ++ ". " ++ show t
+    show (Scheme as t) = "forall " ++ quants ++ ". " ++ show t
+        where quants = intercalate " " (map show as)
 
 
-newtype T a = T (StateT Int (Either String) a)
+-- newtype T a = T (StateT Int (Either String) a)
+newtype T a = T (StateT Ident (Either String) a)
     deriving (Functor, Monad, MonadError String)
 
 runT :: T a -> Either String a
-runT (T s) = s `evalStateT` 0
+runT (T s) = s `evalStateT` (IDD "a" 0)
 
 instance Applicative T where
     pure = return
@@ -74,7 +74,8 @@ a $> f = f <$> a
 
 
 newTyVar :: T Type
-newTyVar = TyVar <$> T (get >>= \x -> ("a_" ++ show x) <$ put (x+1))
+-- newTyVar = TyVar <$> T (get >>= \x -> ("a_" ++ show x) <$ put (x+1))
+newTyVar = TyVar <$> T (get >>= \x@(IDD a n) -> x <$ put (IDD a (n+1)))
 
 newInstance :: TypeScheme -> T Type
 newInstance (Scheme ids ty) =
@@ -111,7 +112,7 @@ mgu t u s = case (s `substitute` t, s `substitute` u) of
          ((TyVar a), u')        | not (a `elem` tyVars u') -> return (extend a u' s)
                                 | otherwise ->
                         throwError ( "Occurs check: cannot construct the infinite type: "
-                                        ++ a ++ " = " ++ show u' )
+                                        ++ show a ++ " = " ++ show u' )
          (t, u'@(TyVar _)) -> mgu u' t s
 
          ((Arrow t1 t2), (Arrow u1 u2)) -> (mgu t1 u1 >=> mgu t2 u2) s
@@ -125,7 +126,7 @@ tp :: TypeEnv -> Term -> Type -> Subst -> T Subst
 
 tp env (ast -> Var x) ty s =
     case x `lookup` env of
-         Nothing -> throwError ("undefined: " ++ x)
+         Nothing -> throwError ("undefined: " ++ show x)
          Just u  -> newInstance u >>= \i -> mgu i ty s
 
 tp env (ast -> Lam x e1) ty s =
@@ -158,14 +159,14 @@ typeOf env expr = runT
 
 
 
-predefEnv = [ (tc, generalize [] t) | (tc, t) <- env ]
+predefEnv = [ (ID tc, generalize [] t) | (tc, t) <- env ]
     where
         bool   = TyCon "Bool" []
         int    = TyCon "Int"  []
         list a = TyCon "List" [a]
         type_  = TyCon "T" []
 
-        a = TyVar "t"
+        a = TyVar (ID "t")
 
         infixr 9 ~>
         (~>) = Arrow

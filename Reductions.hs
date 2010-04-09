@@ -116,7 +116,7 @@ desu bt lm en t@(ast -> Let x e m) k1 k2 =
 desu bt lm en t@(ast -> Var x@(resolve en -> Just e)) k1 k2 =
     -- desu bt en e (\en' e' -> k1 (assert x e' en') t)
     --              (\en' e' -> k2 (assert x e' en') e')
-    k1 en (markS ("res " ++ x) t) :
+    k1 en (markS ("res " ++ show x) t) :
     desu bt lm en e (\en' e' -> k1 (assert x e' en') t)
                     (\en' e' -> k2 (assert x e' en') e')
 

@@ -68,10 +68,16 @@ pushLet x e t = case scrubFor e t of
 -- abvgd {{{
 
 -- XXX want smarter renaming-renaming-renaming
+-- newName :: Ident -> Vars -> Ident
+-- newName (v:x:[]) vs | isDigit x = newName [v] vs
+-- newName v vs = head [ y' | n <- [ 0 .. ]
+--                          , let y' = v ++ show n , not (y' ^? vs) ]
+
 newName :: Ident -> Vars -> Ident
-newName (v:x:[]) vs | isDigit x = newName [v] vs
-newName v vs = head [ y' | n <- [ 0 .. ]
-                         , let y' = v ++ show n , not (y' ^? vs) ]
+newName (ID x) vs = newName (IDD x 0) vs
+newName (IDD x n) vs | id ^? vs  = newName id vs
+                     | otherwise = id
+    where id = IDD x (n + 1)
 
 
 newNameIn :: Ident -> [Term] -> Ident

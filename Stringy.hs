@@ -1,4 +1,5 @@
 {-# LANGUAGE ViewPatterns  #-}
+{-# LANGUAGE PackageImports  #-}
 {-# OPTIONS_GHC -fno-warn-overlapping-patterns #-}
 
 module Stringy
@@ -12,13 +13,20 @@ import Primitives
 
 import Data.Function
 
-import Text.ParserCombinators.Parsec
+import Text.ParserCombinators.Parsec hiding ( State(..) )
 -- import Text.Parsec.String
 
 import Text.ParserCombinators.Parsec.Error ( Message(..), errorMessages )
 
 import Control.Monad
 import Control.Applicative hiding ( Alternative(..), many )
+import "monads-fd" Control.Monad.State
+
+
+infix 4 $>
+($>) :: (Applicative f) => f a -> (a -> b) -> f b
+($>) = flip fmap
+
 
 -- in {{{
 
@@ -65,9 +73,10 @@ parseLet = flip (foldr (uncurry leet))
 smallVar, largeVar :: Parser Ident
 
 -- smallVar = (:[]) <$> letter <?> "short variable"
-smallVar = (:) <$> letter <*> (many digit <|> pure []) <?> "short variable"
+smallVar = (\x xs -> ID (x:xs)) <$> letter <*> (many digit <|> pure [])
+                                <?> "short variable"
 
-largeVar = (:) <$> letter <*> many alphaNum <?> "variable"
+largeVar = (\x xs -> ID (x:xs)) <$> letter <*> many alphaNum <?> "variable"
 
 
 
@@ -102,6 +111,42 @@ instance Applicative (GenParser t s) where
 
 -- out {{{
 
+data IdentRenderState = IRS { candidate, takenGen0, takenGen1 :: [Ident]
+                            , replaceMap :: [(Ident, Ident)] }
+type Shw a = State IdentRenderState a
+
+runShw sh = (fst . fix) (\ ~(_, s) -> runState sh
+                                IRS { candidate = [ ID [x] | x <- ['a'..] ]
+                                    , takenGen1 = takenGen0 s
+                                    , takenGen0 = [], replaceMap = [] } )
+
+
+cleanIdentifier :: Ident -> Shw Ident
+cleanIdentifier t@(ID _) =
+        modify (\s -> s { takenGen0 = t : takenGen0 s }) >> return t
+
+cleanIdentifier t@(IDD x n) = do
+    bundle <- get
+    case t `lookup` replaceMap bundle of
+         Just t' -> return t'
+         Nothing -> do
+             let (c0:cands) = dropWhile (`elem` takenGen1 bundle)
+                                        (candidate bundle)
+             put (bundle { candidate = cands
+                         , replaceMap = (t, c0) : replaceMap bundle })
+             return c0
+
+
+termCleanIdentifiers :: Term -> Term
+termCleanIdentifiers = runShw . f
+    where
+        f (ast -> Var i)       = var <$> cleanIdentifier i
+        f (ast -> App t1 t2)   = app <$> f t1 <*> f t2
+        f (ast -> Lam x e)     = lam <$> cleanIdentifier x <*> f e
+        f (ast -> Let x e1 e2) = leet <$> cleanIdentifier x <*> f e1 <*> f e2
+        f (ast -> Mark s e)    = mark s <$> f e
+
+
 bracketIfComposite, showsLam :: Term -> ShowS
 
 bracketIfComposite t@(ast -> Var _)    = showsLam t
@@ -110,7 +155,7 @@ bracketIfComposite t@(ast -> Mark _ _) = showsLam t
 bracketIfComposite t                   = showParen True (showsLam t)
 
 
-showsLam (ast -> Var x) = showString x
+showsLam (ast -> Var x) = shows x
 
 showsLam (ast -> App l r) =
     ( case ast l of
@@ -119,9 +164,9 @@ showsLam (ast -> App l r) =
     . (' ' :) . bracketIfComposite r
 
 showsLam (ast -> Lam x t) =
-    ('|' :) . (x ++)
+    ('|' :) . shows x
     . fix ( \f t -> case ast t of
-                Lam x t' -> (x ++) . f t'
+                Lam x t' -> shows x . f t'
                 _        -> ('.' :) . showsLam t ) t
 
 showsLam t@(ast -> Let _ _ _) =
@@ -130,7 +175,7 @@ showsLam t@(ast -> Let _ _ _) =
                 Let x e t' -> binder x e . f t'
                 _          -> showsLam t ) t
 
-    where binder x e = showParen True ( ((x ++ " = ") ++) . showsLam e ) . (' ' :)
+    where binder x e = showParen True ( shows x . (" = "++) . showsLam e ) . (' ' :)
 
 showsLam (ast -> Prim p) = showPrimRep (primrep p)
     where showPrimRep = (++)
@@ -141,7 +186,7 @@ showsLam (ast -> Mark (Just s) t) =
 
 
 instance Show Term where
-    showsPrec _ = showsLam
+    showsPrec _ = showsLam . termCleanIdentifiers
 
 -- }}}
 
