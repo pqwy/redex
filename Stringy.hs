@@ -12,6 +12,7 @@ import Operations
 import Primitives
 
 import Data.Function
+import Control.Category ( (>>>), (<<<) )
 
 import Text.ParserCombinators.Parsec hiding ( State(..) )
 -- import Text.Parsec.String
@@ -161,26 +162,26 @@ showsLam (ast -> App l r) =
     ( case ast l of
            App _ _ -> showsLam l
            _       -> bracketIfComposite l )
-    . (' ' :) . bracketIfComposite r
+    <<< (' ' :) <<< bracketIfComposite r
 
 showsLam (ast -> Lam x t) =
-    ('|' :) . shows x
-    . fix ( \f t -> case ast t of
-                Lam x t' -> shows x . f t'
-                _        -> ('.' :) . showsLam t ) t
+    ('|' :) <<< shows x <<<
+    fix ( \f t -> case ast t of
+            Lam x t' -> shows x <<< f t'
+            _        -> ('.' :) <<< showsLam t ) t
 
 showsLam t@(ast -> Let _ _ _) =
-    ("let " ++)
-    . fix ( \f t -> case ast t of
-                Let x e t' -> binder x e . f t'
-                _          -> showsLam t ) t
+    ("let " ++) <<<
+    fix ( \f t -> case ast t of
+            Let x e t' -> binder x e <<< f t'
+            _          -> showsLam t ) t
 
-    where binder x e = showParen True ( shows x . (" = "++) . showsLam e ) . (' ' :)
+    where binder x e = showParen True ( shows x <<< (" = "++) <<< showsLam e ) <<< (' ' :)
 
 showsLam (ast -> Prim p) = showPrimRep (primrep p)
     where showPrimRep = (++)
 
-showsLam (ast -> Mark Nothing t) = (" [ "++) . showsLam t . (" ] "++)
+showsLam (ast -> Mark Nothing t) = (" [ "++) <<< showsLam t <<< (" ] "++)
 showsLam (ast -> Mark (Just s) t) =
     ((" [ " ++ s ++ ": ")++) . showsLam t . (" ] "++)
 
