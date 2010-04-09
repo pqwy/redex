@@ -12,8 +12,6 @@ import Ast
 import Data.Function ( fix )
 import Data.Maybe
 
-import Data.Char ( isDigit )
-
 -- tree xforms {{{
 
 scrubFor :: Term -> Term -> AST

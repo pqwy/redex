@@ -3,6 +3,7 @@ module Ast
     , AST(..), ast
     , var, app, lam, fixLet, prim, mark, mark', markS
     , freeVars, freeIn, notFreeIn, vars, varIn
+    , Type(..), TypeScheme(..)
     , (^+), (^?), (^<-), (^->), noVars, singleton, unions
     , PrimRep, Primitive(..), arity, primrep, combineRep, num
     ) where
@@ -13,7 +14,6 @@ import Prelude hiding ( elem )
 import qualified SimpleSet as S
 
 
--- type Ident = String
 data Ident = ID String | IDD String Int
     deriving (Eq, Ord)
 
@@ -21,8 +21,10 @@ instance Show Ident where
     show (ID x)    = x
     show (IDD x n) = x ++ "__" ++ show n
 
-type Vars = S.Set Ident
 
+-- {{{ AST
+
+type Vars = S.Set Ident
 
 data Term = Var_ Ident
           | App_ Vars Vars Term Term
@@ -110,7 +112,18 @@ ast (Let_ _ _ x e m) = Let x e m
 ast (Prim_ p) = Prim p
 ast (Mark_ s t) = Mark s t
 
+-- }}}
 
+-- {{{ types
+
+data Type = TyVar Ident | Arrow Type Type | TyCon String [Type]
+    deriving (Eq)
+
+data TypeScheme = Scheme [Ident] Type
+
+-- }}}
+
+-- {{{ sets
 
 noVars :: Vars
 noVars = S.empty
@@ -134,6 +147,9 @@ infix 4 ^?
 (^?) :: Ident -> Vars -> Bool
 (^?) = S.elem
 
+-- }}}
+
+-- {{{ prims
 
 data Primitive = Num Int
                | NumOp (Int -> Int) PrimRep
@@ -172,4 +188,7 @@ combineRep a b = a ++ ' ' : b
 num :: Int -> Primitive
 num = Num
 
+-- }}}
 
+
+-- vim:set fdm=marker:

@@ -4,6 +4,7 @@
 
 module Stringy
     ( showsLam, parseLambda, parseLambdaOrValidatePrefix
+    , showsType, showsScheme
     ) where
 
 
@@ -110,43 +111,7 @@ instance Applicative (GenParser t s) where
 
 -- }}}
 
--- out {{{
-
-data IdentRenderState = IRS { candidate, takenGen0, takenGen1 :: [Ident]
-                            , replaceMap :: [(Ident, Ident)] }
-type Shw a = State IdentRenderState a
-
-runShw sh = (fst . fix) (\ ~(_, s) -> runState sh
-                                IRS { candidate = [ ID [x] | x <- ['a'..] ]
-                                    , takenGen1 = takenGen0 s
-                                    , takenGen0 = [], replaceMap = [] } )
-
-
-cleanIdentifier :: Ident -> Shw Ident
-cleanIdentifier t@(ID _) =
-        modify (\s -> s { takenGen0 = t : takenGen0 s }) >> return t
-
-cleanIdentifier t@(IDD x n) = do
-    bundle <- get
-    case t `lookup` replaceMap bundle of
-         Just t' -> return t'
-         Nothing -> do
-             let (c0:cands) = dropWhile (`elem` takenGen1 bundle)
-                                        (candidate bundle)
-             put (bundle { candidate = cands
-                         , replaceMap = (t, c0) : replaceMap bundle })
-             return c0
-
-
-termCleanIdentifiers :: Term -> Term
-termCleanIdentifiers = runShw . f
-    where
-        f (ast -> Var i)       = var <$> cleanIdentifier i
-        f (ast -> App t1 t2)   = app <$> f t1 <*> f t2
-        f (ast -> Lam x e)     = lam <$> cleanIdentifier x <*> f e
-        f (ast -> Let x e1 e2) = leet <$> cleanIdentifier x <*> f e1 <*> f e2
-        f (ast -> Mark s e)    = mark s <$> f e
-
+-- out lam {{{
 
 bracketIfComposite, showsLam :: Term -> ShowS
 
@@ -183,7 +148,18 @@ showsLam (ast -> Prim p) = showPrimRep (primrep p)
 
 showsLam (ast -> Mark Nothing t) = (" [ "++) <<< showsLam t <<< (" ] "++)
 showsLam (ast -> Mark (Just s) t) =
-    ((" [ " ++ s ++ ": ")++) . showsLam t . (" ] "++)
+    ((" [ " ++ s ++ ": ")++) <<< showsLam t <<< (" ] "++)
+
+
+
+termCleanIdentifiers :: Term -> Term
+termCleanIdentifiers = runShw . f
+    where
+        f (ast -> Var i)       = var <$> cleanIdentifier i
+        f (ast -> App t1 t2)   = app <$> f t1 <*> f t2
+        f (ast -> Lam x e)     = lam <$> cleanIdentifier x <*> f e
+        f (ast -> Let x e1 e2) = leet <$> cleanIdentifier x <*> f e1 <*> f e2
+        f (ast -> Mark s e)    = mark s <$> f e
 
 
 instance Show Term where
@@ -191,5 +167,79 @@ instance Show Term where
 
 -- }}}
 
+-- {{{ out ty
+
+brk, showsType :: Type -> ShowS
+
+brk t@(TyVar _)    = showsType t
+brk t@(TyCon _ []) = showsType t
+brk t              = showParen True (showsType t)
+
+showsType (TyVar i) = shows i
+showsType (Arrow t1 t2) =
+    brk t1 <<< (" -> " ++) <<<
+    case t2 of
+         (Arrow _ _) -> showsType t2
+         _           -> brk t2
+
+showsType (TyCon c []) = (c ++)
+showsType (TyCon c ts) =
+    ((c ++ " ") ++) <<< foldr (.) id (map brk ts)
+
+
+typeCleanIdentifiers :: Type -> Shw Type
+typeCleanIdentifiers (TyVar i)    = TyVar <$> cleanIdentifier i
+typeCleanIdentifiers (Arrow a b)  =
+    Arrow <$> typeCleanIdentifiers a <*> typeCleanIdentifiers b
+typeCleanIdentifiers (TyCon c ts) =
+    TyCon c <$> mapM typeCleanIdentifiers ts
+
+
+instance Show Type where
+    showsPrec _ = showsType . runShw . typeCleanIdentifiers
+
+
+schemeCleanIdentifiers (Scheme as t) =
+    Scheme <$> mapM cleanIdentifier as <*> typeCleanIdentifiers t
+
+showsScheme (Scheme [] t) = showsType t
+showsScheme (Scheme as t) =
+    ("forall " ++) <<<
+        foldr (\a -> ((shows a <<< (' ':)).)) id as <<<
+        (". " ++) <<< shows t
+
+instance Show TypeScheme where
+    showsPrec _ = showsScheme . runShw . schemeCleanIdentifiers
+    
+-- }}}
+
+-- {{{ ident render
+
+data IdentRenderState = IRS { candidate, takenGen0, takenGen1 :: [Ident]
+                            , replaceMap :: [(Ident, Ident)] }
+type Shw a = State IdentRenderState a
+
+runShw sh = (fst . fix) (\ ~(_, s) -> runState sh
+                                IRS { candidate = [ ID [x] | x <- ['a'..] ]
+                                    , takenGen1 = takenGen0 s
+                                    , takenGen0 = [], replaceMap = [] } )
+
+
+cleanIdentifier :: Ident -> Shw Ident
+cleanIdentifier t@(ID _) =
+        modify (\s -> s { takenGen0 = t : takenGen0 s }) >> return t
+
+cleanIdentifier t@(IDD x n) = do
+    bundle <- get
+    case t `lookup` replaceMap bundle of
+         Just t' -> return t'
+         Nothing -> do
+             let (c0:cands) = dropWhile (`elem` takenGen1 bundle)
+                                        (candidate bundle)
+             put (bundle { candidate = cands
+                         , replaceMap = (t, c0) : replaceMap bundle })
+             return c0
+
+-- }}}
 
 -- vim:set fdm=marker:

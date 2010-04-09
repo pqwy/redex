@@ -16,15 +16,15 @@ import "monads-fd" Control.Monad.Error
 import Control.Applicative
 
 
-data Type = TyVar Ident | Arrow Type Type | TyCon String [Type]
-    deriving (Eq)
+-- data Type = TyVar Ident | Arrow Type Type | TyCon String [Type]
+--     deriving (Eq)
 
 
-instance Show Type where
-    show (TyVar x)     = show x
-    show (Arrow t1 t2) = "(" ++ show t1 ++ " -> " ++ show t2 ++ ")"
-    show (TyCon c [])  = c
-    show (TyCon c ts)  = c ++ " " ++ intercalate " " (map show ts)
+-- instance Show Type where
+--     show (TyVar x)     = show x
+--     show (Arrow t1 t2) = "(" ++ show t1 ++ " -> " ++ show t2 ++ ")"
+--     show (TyCon c [])  = c
+--     show (TyCon c ts)  = c ++ " " ++ intercalate " " (map show ts)
 
 
 
@@ -40,21 +40,21 @@ substitute s ty@(TyVar x)  = maybe ty (substitute s) (x `lookup` s)
 substitute s (Arrow t1 t2) = Arrow (substitute s t1) (substitute s t2)
 substitute s (TyCon k ts)  = TyCon k (map (substitute s) ts)
 
-extend' :: Ident -> Type -> (Type -> Type) -> Type -> Type
-extend' x t s ty@(TyVar y) | x   == y  = extend' x t s t
-                           | ty' == ty = ty
-                           | otherwise = extend' x t s ty'
-                    where ty' = s ty
-extend' x t s (Arrow t1 t2) = Arrow (extend' x t s t1) (extend' x t s t2)
-extend' x t s (TyCon k ts)  = TyCon k (map (extend' x t s) ts)
+-- extend' :: Ident -> Type -> (Type -> Type) -> Type -> Type
+-- extend' x t s ty@(TyVar y) | x   == y  = extend' x t s t
+--                            | ty' == ty = ty
+--                            | otherwise = extend' x t s ty'
+--                     where ty' = s ty
+-- extend' x t s (Arrow t1 t2) = Arrow (extend' x t s t1) (extend' x t s t2)
+-- extend' x t s (TyCon k ts)  = TyCon k (map (extend' x t s) ts)
 
 
-data TypeScheme = Scheme [Ident] Type
+-- data TypeScheme = Scheme [Ident] Type
 
-instance Show TypeScheme where
-    show (Scheme [] t) = show t
-    show (Scheme as t) = "forall " ++ quants ++ ". " ++ show t
-        where quants = intercalate " " (map show as)
+-- instance Show TypeScheme where
+--     show (Scheme [] t) = show t
+--     show (Scheme as t) = "forall " ++ quants ++ ". " ++ show t
+--         where quants = intercalate " " (map show as)
 
 
 -- newtype T a = T (StateT Int (Either String) a)
@@ -103,6 +103,8 @@ unions = foldr union []
 generalize :: TypeEnv -> Type -> TypeScheme
 generalize e t = Scheme (tyVars t \\ envTyVars e) t
 
+showRaw :: Type -> String
+showRaw = (`showsType` "")
 
 mgu :: Type -> Type -> Subst -> T Subst
 
@@ -112,14 +114,14 @@ mgu t u s = case (s `substitute` t, s `substitute` u) of
          ((TyVar a), u')        | not (a `elem` tyVars u') -> return (extend a u' s)
                                 | otherwise ->
                         throwError ( "Occurs check: cannot construct the infinite type: "
-                                        ++ show a ++ " = " ++ show u' )
+                                        ++ show a ++ " = " ++ showRaw u' )
          (t, u'@(TyVar _)) -> mgu u' t s
 
          ((Arrow t1 t2), (Arrow u1 u2)) -> (mgu t1 u1 >=> mgu t2 u2) s
 
          ((TyCon a as), (TyCon b bs)) | a == b -> foldM (flip id) s (zipWith mgu as bs)
 
-         (t', u') -> throwError ( "cannot unify " ++ show t' ++ " with " ++ show u' )
+         (t', u') -> throwError ( "cannot unify " ++ showRaw t' ++ " with " ++ showRaw u' )
 
 
 tp :: TypeEnv -> Term -> Type -> Subst -> T Subst
