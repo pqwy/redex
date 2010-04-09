@@ -62,7 +62,7 @@ parseLet = flip (foldr (uncurry leet))
           eq = spaces *> string "=" *> spaces
 
 
-smallVar, largeVar :: Parser VarID
+smallVar, largeVar :: Parser Ident
 
 -- smallVar = (:[]) <$> letter <?> "short variable"
 smallVar = (:) <$> letter <*> (many digit <|> pure []) <?> "short variable"

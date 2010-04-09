@@ -28,7 +28,7 @@ scrubFor t2 t@(ast -> Let x e m)
 scrubFor t2 (ast -> t) = t
 
 
-substitute :: Term -> VarID -> Term -> Term
+substitute :: Term -> Ident -> Term -> Term
 substitute s x t | x `notFreeIn` t = t
 
 substitute s x (scrubFor s -> App a b) =
@@ -42,7 +42,7 @@ substitute s x (scrubFor s -> Mark t m) =
     mark t (substitute s x m)
 
 
-leet, pushLet :: VarID -> Term -> Term -> Term
+leet, pushLet :: Ident -> Term -> Term -> Term
 
 leet x e@(ast -> Var y) t | x /= y = substitute e x t
 leet x e t                         = pushLet x e t
@@ -68,17 +68,17 @@ pushLet x e t = case scrubFor e t of
 -- abvgd {{{
 
 -- XXX want smarter renaming-renaming-renaming
-newName :: VarID -> Vars -> VarID
+newName :: Ident -> Vars -> Ident
 newName (v:x:[]) vs | isDigit x = newName [v] vs
 newName v vs = head [ y' | n <- [ 0 .. ]
                          , let y' = v ++ show n , not (y' ^? vs) ]
 
 
-newNameIn :: VarID -> [Term] -> VarID
+newNameIn :: Ident -> [Term] -> Ident
 newNameIn v = newName v . unions . map vars
 
 
-alpha :: VarID -> VarID -> Term -> Term
+alpha :: Ident -> Ident -> Term -> Term
 alpha x y t | x `notFreeIn` t = t
 alpha x y (ast -> App a b    ) = app (alpha x y a) (alpha x y b)
 alpha x y (ast -> Lam x' m   ) = lam x' (alpha x y m)

@@ -4,35 +4,35 @@ module Rep where
 import SimpleSet
 
 
-type VarID = String
+type Ident = String
 
 
-data Term = Var_ VarID | App_ (Set VarID) Term Term | Lam_ (Set VarID) VarID Term
+data Term = Var_ Ident | App_ (Set Ident) Term Term | Lam_ (Set Ident) Ident Term
     deriving (Show, Eq)
 
-data BreadCrumb = BcAppL Term | BcAppR Term | BcLam VarID
+data BreadCrumb = BcAppL Term | BcAppR Term | BcLam Ident
     deriving (Show, Eq)
 
 newtype Lambda = Lambda ([BreadCrumb], Term)
     deriving (Show, Eq)
 
-data LambdaRep = Var VarID | App Lambda Lambda | Lam VarID Lambda
+data LambdaRep = Var Ident | App Lambda Lambda | Lam Ident Lambda
     deriving (Show, Eq)
 
 
-freeVars :: Term -> Set VarID
+freeVars :: Term -> Set Ident
 freeVars (Var_ x)      = singleton x
 freeVars (App_ xs _ _) = xs
 freeVars (Lam_ xs _ _) = xs
 
 
-var :: VarID -> Term
+var :: Ident -> Term
 var = Var_
 
 app :: Term -> Term -> Term
 app a b = App_ (freeVars a `union` freeVars b) a b
 
-lam :: VarID -> Term -> Term
+lam :: Ident -> Term -> Term
 lam x m = Lam_ (x `remove` freeVars m) x m
 
 

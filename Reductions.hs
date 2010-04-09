@@ -168,24 +168,24 @@ odesu bt t@(ast -> Var x) k1 k2 =
 -- }}}
 
 
-type Env = [(VarID, Term)]
+type Env = [(Ident, Term)]
 
 noenv = [] :: Env
 
-push :: VarID -> Term -> Env -> Env
+push :: Ident -> Term -> Env -> Env
 push x e en = (x, e) : en
 
-pop :: Env -> Maybe ((VarID, Term), Env)
+pop :: Env -> Maybe ((Ident, Term), Env)
 pop [] = Nothing
 pop (xe:en) = Just (xe, en)
 
-assert :: VarID -> Term -> Env -> Env
+assert :: Ident -> Term -> Env -> Env
 assert x e [] = error "no."
 assert x e (ye@(y, _) : en)
     | x == y = (x, e) : en
     | otherwise = ye : assert x e en
 
-resolve :: Env -> VarID -> Maybe Term
+resolve :: Env -> Ident -> Maybe Term
 resolve = flip lookup
 
 
@@ -226,16 +226,16 @@ reduce :: Reduceron a -> [a]
 reduce r = map fst $ r `reduce_` noenv
 
 
-resolveM :: VarID -> Reduceron (Maybe Term)
+resolveM :: Ident -> Reduceron (Maybe Term)
 resolveM x = gets (lookup x)
 
-pushM :: VarID -> Term -> Reduceron ()
+pushM :: Ident -> Term -> Reduceron ()
 pushM x t = modify ((x, t) :)
 
 popM :: Reduceron Term
 popM = gets (snd . head) <* modify tail
 
-assertM :: VarID -> Term -> Reduceron ()
+assertM :: Ident -> Term -> Reduceron ()
 assertM x t = modify (assert x t)
 
 -- }}}

@@ -21,7 +21,7 @@ import Control.Arrow ( first, second )
 import Data.GraphViz
 
 
-data NodeType = NLam | NApp | NVar VarID
+data NodeType = NLam | NApp | NVar Ident
     deriving (Show, Eq)
 
 data RelType = Fun | Arg | Formal | Body
@@ -32,17 +32,17 @@ graph :: (DynGraph g) => Term -> g NodeType RelType
 graph t = let (_, ns, es) = evalState (termGraph t) (0, []) in mkGraph ns es
 
 
-type GProc = State (Int, [(VarID, Int)]) 
+type GProc = State (Int, [(Ident, Int)]) 
 
 
 label :: GProc Int
 label = gets fst <* modify (first succ)
 
-extend :: VarID -> Int -> GProc a -> GProc a
+extend :: Ident -> Int -> GProc a -> GProc a
 extend x n a =
     modify (second ((x, n):)) *> a <* modify (second tail)
 
-resolve :: VarID -> GProc (Maybe Int)
+resolve :: Ident -> GProc (Maybe Int)
 resolve x = gets (lookup x . snd)
 
 

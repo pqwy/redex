@@ -1,5 +1,5 @@
 module Ast
-    ( Term, VarID, Vars
+    ( Term, Ident, Vars
     , AST(..), ast
     , var, app, lam, fixLet, prim, mark, mark', markS
     , freeVars, freeIn, notFreeIn, vars, varIn
@@ -13,15 +13,16 @@ import Prelude hiding ( elem )
 import qualified SimpleSet as S
 
 
-type VarID = String
-
-type Vars = S.Set VarID
+type Ident = String
 
 
-data Term = Var_ VarID
+type Vars = S.Set Ident
+
+
+data Term = Var_ Ident
           | App_ Vars Vars Term Term
-          | Lam_ Vars Vars VarID Term
-          | Let_ Vars Vars VarID Term Term
+          | Lam_ Vars Vars Ident Term
+          | Let_ Vars Vars Ident Term Term
           | Prim_ Primitive
           | Mark_ (Maybe String) Term
     -- deriving (Show, Eq)
@@ -45,16 +46,16 @@ vars (Prim_ _) = noVars
 vars (Mark_ _ t) = vars t
 
 
-freeIn, notFreeIn :: VarID -> Term -> Bool
+freeIn, notFreeIn :: Ident -> Term -> Bool
 freeIn x t = x ^? freeVars t
 
 notFreeIn x t = not (freeIn x t)
 
-varIn :: VarID -> Term -> Bool
+varIn :: Ident -> Term -> Bool
 varIn x t = x ^? vars t
 
 
-var :: VarID -> Term
+var :: Ident -> Term
 var = Var_
 
 app :: Term -> Term -> Term
@@ -62,13 +63,13 @@ app a b = App_ (freeVars a ^+ freeVars b)
                (vars a ^+ vars b)
                a b
 
-lam :: VarID -> Term -> Term
+lam :: Ident -> Term -> Term
 lam x m = Lam_ (x ^<- freeVars m)
                (x ^-> vars m)
                x m
 
 
-fixLet :: VarID -> Term -> Term -> Term
+fixLet :: Ident -> Term -> Term -> Term
 fixLet x e m = Let_ nufree nuvars x e m
     where nufree = x ^<- (freeVars e ^+ freeVars m)
           nuvars = x ^-> (vars e ^+ vars m)
@@ -88,10 +89,10 @@ markS :: String -> Term -> Term
 markS = Mark_ . Just
 
 
-data AST = Var VarID
+data AST = Var Ident
          | App Term Term
-         | Lam VarID Term
-         | Let VarID Term Term
+         | Lam Ident Term
+         | Let Ident Term Term
          | Prim Primitive
          | Mark (Maybe String) Term
 
@@ -109,7 +110,7 @@ ast (Mark_ s t) = Mark s t
 noVars :: Vars
 noVars = S.empty
 
-singleton :: VarID -> Vars
+singleton :: Ident -> Vars
 singleton = S.singleton
 
 unions :: [Vars] -> Vars
@@ -120,12 +121,12 @@ infixr 5 ^+
 (^+) = S.union
 
 infixr 7 ^<-, ^->
-(^<-), (^->) :: VarID -> Vars -> Vars
+(^<-), (^->) :: Ident -> Vars -> Vars
 (^<-) = S.remove
 (^->) = S.insert
 
 infix 4 ^?
-(^?) :: VarID -> Vars -> Bool
+(^?) :: Ident -> Vars -> Bool
 (^?) = S.elem
 
 
