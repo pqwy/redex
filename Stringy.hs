@@ -25,11 +25,6 @@ import Control.Applicative hiding ( Alternative(..), many )
 import "monads-fd" Control.Monad.State
 
 
-infix 4 $>
-($>) :: (Applicative f) => f a -> (a -> b) -> f b
-($>) = flip fmap
-
-
 -- in {{{
 
 bracketed :: Parser a -> Parser a
@@ -75,10 +70,10 @@ parseLet = flip (foldr (uncurry leet))
 smallVar, largeVar :: Parser Ident
 
 -- smallVar = (:[]) <$> letter <?> "short variable"
-smallVar = (\x xs -> ID (x:xs)) <$> letter <*> (many digit <|> pure [])
+smallVar = (\c -> ident . (c:)) <$> letter <*> (many digit <|> pure [])
                                 <?> "short variable"
 
-largeVar = (\x xs -> ID (x:xs)) <$> letter <*> many alphaNum <?> "variable"
+largeVar = (\c -> ident . (c:)) <$> letter <*> many alphaNum <?> "variable"
 
 
 
@@ -155,10 +150,10 @@ showsLam (ast -> Mark (Just s) t) =
 termCleanIdentifiers :: Term -> Term
 termCleanIdentifiers = runShw . f
     where
-        f (ast -> Var i)       = var <$> cleanIdentifier i
-        f (ast -> App t1 t2)   = app <$> f t1 <*> f t2
-        f (ast -> Lam x e)     = lam <$> cleanIdentifier x <*> f e
-        f (ast -> Let x e1 e2) = leet <$> cleanIdentifier x <*> f e1 <*> f e2
+        f (ast -> Var i)       = var    <$> cleanIdentifier i
+        f (ast -> App t1 t2)   = app    <$> f t1 <*> f t2
+        f (ast -> Lam x e)     = lam    <$> cleanIdentifier x <*> f e
+        f (ast -> Let x e1 e2) = leet   <$> cleanIdentifier x <*> f e1 <*> f e2
         f (ast -> Mark s e)    = mark s <$> f e
 
 
@@ -220,7 +215,7 @@ data IdentRenderState = IRS { candidate, takenGen0, takenGen1 :: [Ident]
 type Shw a = State IdentRenderState a
 
 runShw sh = (fst . fix) (\ ~(_, s) -> runState sh
-                                IRS { candidate = [ ID [x] | x <- ['a'..] ]
+                                IRS { candidate = [ ident [x] | x <- ['a'..] ]
                                     , takenGen1 = takenGen0 s
                                     , takenGen0 = [], replaceMap = [] } )
 

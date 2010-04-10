@@ -72,10 +72,9 @@ pushLet x e t = case scrubFor e t of
 --                          , let y' = v ++ show n , not (y' ^? vs) ]
 
 newName :: Ident -> Vars -> Ident
-newName (ID x) vs = newName (IDD x 0) vs
-newName (IDD x n) vs | id ^? vs  = newName id vs
-                     | otherwise = id
-    where id = IDD x (n + 1)
+newName i vs | i' ^? vs  = newName i' vs
+             | otherwise = i'
+    where i' = nextId i
 
 
 newNameIn :: Ident -> [Term] -> Ident

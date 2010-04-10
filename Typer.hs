@@ -33,14 +33,11 @@ newtype T a = T (StateT Ident (Either String) a)
     deriving (Functor, Monad, MonadError String, Applicative)
 
 runT :: T a -> Either String a
-runT (T s) = s `evalStateT` (IDD "a" 0)
-
-infix 4 $>
-a $> f = f <$> a
+runT (T s) = s `evalStateT` nextId (ident "a")
 
 
 newTyVar :: T Type
-newTyVar = TyVar <$> T (get >>= \x@(IDD a n) -> x <$ put (IDD a (n+1)))
+newTyVar = TyVar <$> T (get >>= \x -> x <$ put (nextId x))
 
 newInstance :: TypeScheme -> T Type
 newInstance (Scheme ids ty) =
@@ -124,14 +121,14 @@ showRaw = (`showsType` "")
 
 
 
-predefEnv = [ (ID tc, generalize [] t) | (tc, t) <- env ]
+predefEnv = [ (ident tc, generalize [] t) | (tc, t) <- env ]
     where
         bool   = TyCon "Bool" []
         int    = TyCon "Int"  []
         list a = TyCon "List" [a]
         type_  = TyCon "T" []
 
-        a = TyVar (ID "t")
+        a = TyVar (ident "t")
 
         infixr 9 ~>
         (~>) = Arrow

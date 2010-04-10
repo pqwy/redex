@@ -1,11 +1,13 @@
 module Ast
     ( Term, Ident(..), Vars
+    , nextId, ident
     , AST(..), ast
     , var, app, lam, fixLet, prim, mark, mark', markS
     , freeVars, freeIn, notFreeIn, vars, varIn
     , Type(..), TypeScheme(..)
     , (^+), (^?), (^<-), (^->), noVars, singleton, unions
     , PrimRep, Primitive(..), arity, primrep, combineRep, num
+    , ($>)
     ) where
 
 
@@ -14,6 +16,8 @@ import Prelude hiding ( elem )
 import qualified SimpleSet as S
 
 
+-- {{{ identifiers
+
 data Ident = ID String | IDD String Int
     deriving (Eq, Ord)
 
@@ -21,6 +25,14 @@ instance Show Ident where
     show (ID x)    = x
     show (IDD x n) = x ++ "__" ++ show n
 
+ident :: String -> Ident
+ident = ID
+
+nextId :: Ident -> Ident
+nextId (ID x)    = IDD x 0
+nextId (IDD x n) = IDD x (n + 1)
+
+-- }}}
 
 -- {{{ AST
 
@@ -190,5 +202,12 @@ num = Num
 
 -- }}}
 
+-- {{{ utils
+
+infix 4 $>
+($>) :: (Functor f) => f a -> (a -> b) -> f b
+($>) = flip fmap
+
+-- }}}
 
 -- vim:set fdm=marker:
