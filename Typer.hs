@@ -16,18 +16,6 @@ import "monads-fd" Control.Monad.Error
 import Control.Applicative
 
 
--- data Type = TyVar Ident | Arrow Type Type | TyCon String [Type]
---     deriving (Eq)
-
-
--- instance Show Type where
---     show (TyVar x)     = show x
---     show (Arrow t1 t2) = "(" ++ show t1 ++ " -> " ++ show t2 ++ ")"
---     show (TyCon c [])  = c
---     show (TyCon c ts)  = c ++ " " ++ intercalate " " (map show ts)
-
-
-
 type Subst = [(Ident, Type)]
 
 emptySubst = [] :: Subst
@@ -40,48 +28,25 @@ substitute s ty@(TyVar x)  = maybe ty (substitute s) (x `lookup` s)
 substitute s (Arrow t1 t2) = Arrow (substitute s t1) (substitute s t2)
 substitute s (TyCon k ts)  = TyCon k (map (substitute s) ts)
 
--- extend' :: Ident -> Type -> (Type -> Type) -> Type -> Type
--- extend' x t s ty@(TyVar y) | x   == y  = extend' x t s t
---                            | ty' == ty = ty
---                            | otherwise = extend' x t s ty'
---                     where ty' = s ty
--- extend' x t s (Arrow t1 t2) = Arrow (extend' x t s t1) (extend' x t s t2)
--- extend' x t s (TyCon k ts)  = TyCon k (map (extend' x t s) ts)
 
-
--- data TypeScheme = Scheme [Ident] Type
-
--- instance Show TypeScheme where
---     show (Scheme [] t) = show t
---     show (Scheme as t) = "forall " ++ quants ++ ". " ++ show t
---         where quants = intercalate " " (map show as)
-
-
--- newtype T a = T (StateT Int (Either String) a)
 newtype T a = T (StateT Ident (Either String) a)
-    deriving (Functor, Monad, MonadError String)
+    deriving (Functor, Monad, MonadError String, Applicative)
 
 runT :: T a -> Either String a
 runT (T s) = s `evalStateT` (IDD "a" 0)
 
-instance Applicative T where
-    pure = return
-    (<*>) = ap
-
-($>) :: (Applicative f) => f a -> (a -> b) -> f b
 infix 4 $>
 a $> f = f <$> a
 
 
 newTyVar :: T Type
--- newTyVar = TyVar <$> T (get >>= \x -> ("a_" ++ show x) <$ put (x+1))
 newTyVar = TyVar <$> T (get >>= \x@(IDD a n) -> x <$ put (IDD a (n+1)))
 
 newInstance :: TypeScheme -> T Type
 newInstance (Scheme ids ty) =
-    substitute <$> foldM (\s id -> newTyVar $> \v -> extend id v s)
-                         emptySubst ids
-               <*> pure ty
+        foldM (\s id -> newTyVar $> \v -> extend id v s)
+                emptySubst ids
+            $> (`substitute` ty)
 
 
 type TypeEnv = [(Ident, TypeScheme)]
@@ -102,9 +67,6 @@ unions = foldr union []
 
 generalize :: TypeEnv -> Type -> TypeScheme
 generalize e t = Scheme (tyVars t \\ envTyVars e) t
-
-showRaw :: Type -> String
-showRaw = (`showsType` "")
 
 mgu :: Type -> Type -> Subst -> T Subst
 
@@ -141,13 +103,9 @@ tp env (ast -> App e1 e2) ty s =
     do a <- newTyVar
        (tp env e1 (Arrow a ty) >=> tp env e2 a) s
 
--- tp env (ast -> Let x e1 e2) ty s =
---     do a  <- newTyVar
---        s1 <- tp env e1 a s
---        tp ((x, generalize env (s1 `substitute` a)) : env) e2 ty s1
-
 tp env (ast -> Let x e1 e2) ty s =
     do a  <- newTyVar
+--     s1 <- tp env e1 a s
        s1 <- tp ((x, Scheme [] a) : env) e1 a s
        tp ((x, generalize env (s1 `substitute` a)) : env)
           e2 ty s1
@@ -158,6 +116,11 @@ typeOf env expr = runT
     ( newTyVar >>= \a ->
         tp env expr a emptySubst $>
             generalize env . (`substitute` a) )
+
+
+showRaw :: Type -> String
+showRaw = (`showsType` "")
+
 
 
 
