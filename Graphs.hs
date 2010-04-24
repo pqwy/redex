@@ -1,5 +1,6 @@
 {-# LANGUAGE ViewPatterns, PatternGuards  #-}
 {-# LANGUAGE PackageImports, GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE DoRec  #-}
 {-# OPTIONS_GHC -fno-warn-overlapping-patterns #-}
 
 module Graphs
@@ -49,8 +50,8 @@ resolve x = gets (lookup x . snd)
 termGraph :: Term -> GProc (Int, [LNode NodeType], [LEdge RelType])
 
 termGraph (ast -> Lam x m) = do
-    n <- label
-    nx <- label
+    n             <- label
+    nx            <- label
     (lab, ns, ls) <- extend x nx $ termGraph m
 
     let nodes = (nx, NVar x) : (n, NLam) : ns
@@ -58,7 +59,7 @@ termGraph (ast -> Lam x m) = do
     return ( n, nodes, edges )
 
 termGraph (ast -> App a b) = do
-    n <- label
+    n                <- label
     (alab, ans, aes) <- termGraph a
     (blab, bns, bes) <- termGraph b
 
@@ -72,15 +73,13 @@ termGraph (ast -> Var x) =
             Just n  -> return (n, [], [])
 
 termGraph (ast -> Let x e m) = do
-    (labe, ens, ees) <-
-        mfix $ \ ~(n, _, _) ->
-            extend x n $ termGraph e
+    rec (labe, ens, ees) <-
+            extend x labe $ termGraph e
 
     (labm, mns, mes) <-
         extend x labe $ termGraph m
 
     return (labm, ens ++ mns, ees ++ mes)
-
 
 
 
