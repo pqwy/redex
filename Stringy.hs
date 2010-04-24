@@ -179,7 +179,7 @@ showsType (Arrow t1 t2) =
 
 showsType (TyCon c []) = (c ++)
 showsType (TyCon c ts) =
-    ((c ++ " ") ++) <<< foldr (.) id (map brk ts)
+    (c ++) <<< foldr (\s k -> (' ':) . s . k) id (map brk ts)
 
 
 typeCleanIdentifiers :: Type -> Shw Type

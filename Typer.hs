@@ -4,7 +4,7 @@
 {-# LANGUAGE PackageImports  #-}
 
 module Typer
-    ( TypeEnv, tp, typeOf
+    ( TypeEnv, tp, typeOf, predefEnv
     ) where
 
 import Ast hiding ( unions )
@@ -87,24 +87,25 @@ tp :: TypeEnv -> Term -> Type -> Subst -> T Subst
 
 tp env (ast -> Var x) ty s =
     case x `lookup` env of
-         Nothing -> throwError ("undefined: " ++ show x)
+         -- Nothing -> throwError ("undefined: " ++ show x)
+         Nothing -> return s -- does not constrain ty: unknowns type as anything at all >:)
          Just u  -> newInstance u >>= \i -> mgu i ty s
 
 tp env (ast -> Lam x e1) ty s =
     do a <- newTyVar
        b <- newTyVar
-       (mgu ty (Arrow a b) >=>
-           tp ((x, Scheme [] a) : env) e1 b) s
+       ( mgu ty (Arrow a b) >=>
+           tp ((x, Scheme [] a) : env) e1 b ) s
     
 tp env (ast -> App e1 e2) ty s =
     do a <- newTyVar
-       (tp env e1 (Arrow a ty) >=> tp env e2 a) s
+       ( tp env e1 (Arrow a ty) >=> tp env e2 a ) s
 
 tp env (ast -> Let x e1 e2) ty s =
     do a  <- newTyVar
 --     s1 <- tp env e1 a s
        s1 <- tp ((x, Scheme [] a) : env) e1 a s
-       tp ((x, generalize env (s1 `substitute` a)) : env)
+       tp ( (x, generalize env (s1 `substitute` a)) : env )
           e2 ty s1
 
 
@@ -123,12 +124,14 @@ showRaw = (`showsType` "")
 
 predefEnv = [ (ident tc, generalize [] t) | (tc, t) <- env ]
     where
-        bool   = TyCon "Bool" []
-        int    = TyCon "Int"  []
-        list a = TyCon "List" [a]
-        type_  = TyCon "T" []
+        bool     = TyCon "Bool" []
+        int      = TyCon "Int"  []
+        list a   = TyCon "List" [a]
+        pair a b = TyCon "Pair" [a, b]
+        type_    = TyCon "T" []
 
         a = TyVar (ident "t")
+        b = TyVar (ident "u")
 
         infixr 9 ~>
         (~>) = Arrow
@@ -145,6 +148,9 @@ predefEnv = [ (ident tc, generalize [] t) | (tc, t) <- env ]
               , ( "head"      , list a ~> a             )
               , ( "tail"      , list a ~> list a        )
               , ( "fix"       , (a ~> a) ~> a           )
+              , ( "pair"      , a ~> b ~> pair a b      )
+              , ( "fst"       , pair a b ~> a           )
+              , ( "snd"       , pair a b ~> b           )
               , ( "undefined" , a                       )
               , ( "bop"       , type_ ~> type_ ~> type_ )
               , ( "unop"      , type_ ~> type_          )
