@@ -1,3 +1,6 @@
+{-# LANGUAGE ViewPatterns  #-}
+{-# LANGUAGE DeriveDataTypeable  #-}
+
 module Ast
     ( Term, Ident(..), Vars
     , nextId, ident
@@ -13,13 +16,16 @@ module Ast
 
 import Prelude hiding ( elem )
 
+import Data.Typeable ( Typeable )
+import Data.Data ( Data(..) )
+
 import qualified SimpleSet as S
 
 
 -- {{{ identifiers
 
 data Ident = ID String | IDD String Int
-    deriving (Eq, Ord)
+    deriving (Eq, Ord, Typeable, Data)
 
 instance Show Ident where
     show (ID x)    = x
@@ -44,8 +50,7 @@ data Term = Var_ Ident
           | Let_ Vars Vars Ident Term Term
           | Prim_ Primitive
           | Mark_ (Maybe String) Term
-    -- deriving (Show, Eq)
-    deriving (Eq)
+    deriving (Typeable, Eq)
 
 
 freeVars :: Term -> Vars
@@ -117,21 +122,36 @@ data AST = Var Ident
 
 
 ast :: Term -> AST
-ast (Var_ x) = Var x
-ast (App_ _ _ l r) = App l r
-ast (Lam_ _ _ x m) = Lam x m
+ast (Var_ x)         = Var x
+ast (App_ _ _ l r)   = App l r
+ast (Lam_ _ _ x m)   = Lam x m
 ast (Let_ _ _ x e m) = Let x e m
-ast (Prim_ p) = Prim p
-ast (Mark_ s t) = Mark s t
+ast (Prim_ p)        = Prim p
+ast (Mark_ s t)      = Mark s t
+
+
+instance Data Term where
+
+    gfoldl k r (ast -> Var x)      = r var `k` x
+    gfoldl k r (ast -> App e1 e2)  = (r app `k` e1) `k` e2
+    gfoldl k r (ast -> Lam x e)    = (r lam `k` x) `k` e
+    gfoldl k r (ast -> Let x e1 e) = ((r fixLet `k` x) `k` e1) `k` e
+    gfoldl k r (ast -> Prim p)     = r (prim p) -- XXX: generic fold skips primitives!!
+    gfoldl k r (ast -> Mark s t)   = r (mark s) `k` t
+
+    gunfold    = error "Term.gunfoldl"
+    toConstr   = error "Term.toConstr"
+    dataTypeOf = error "Term.dataTypeOf"
 
 -- }}}
 
 -- {{{ types
 
 data Type = TyVar Ident | Arrow Type Type | TyCon String [Type]
-    deriving (Eq)
+    deriving (Eq, Typeable, Data)
 
 data TypeScheme = Scheme [Ident] Type
+    deriving (Eq, Typeable, Data)
 
 -- }}}
 

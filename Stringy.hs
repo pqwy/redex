@@ -24,6 +24,8 @@ import Control.Monad
 import Control.Applicative hiding ( Alternative(..), many )
 import "monads-fd" Control.Monad.State
 
+import Data.Data
+import Data.Generics
 
 -- in {{{
 
@@ -146,19 +148,8 @@ showsLam (ast -> Mark (Just s) t) =
     ((" [ " ++ s ++ ": ")++) <<< showsLam t <<< (" ] "++)
 
 
-
-termCleanIdentifiers :: Term -> Term
-termCleanIdentifiers = runShw . f
-    where
-        f (ast -> Var i)       = var    <$> cleanIdentifier i
-        f (ast -> App t1 t2)   = app    <$> f t1 <*> f t2
-        f (ast -> Lam x e)     = lam    <$> cleanIdentifier x <*> f e
-        f (ast -> Let x e1 e2) = leet   <$> cleanIdentifier x <*> f e1 <*> f e2
-        f (ast -> Mark s e)    = mark s <$> f e
-
-
 instance Show Term where
-    showsPrec _ = showsLam . termCleanIdentifiers
+    showsPrec _ = showsLam . cleanIdents
 
 -- }}}
 
@@ -181,30 +172,17 @@ showsType (TyCon c []) = (c ++)
 showsType (TyCon c ts) =
     (c ++) <<< foldr (\s k -> (' ':) . s . k) id (map brk ts)
 
-
-typeCleanIdentifiers :: Type -> Shw Type
-typeCleanIdentifiers (TyVar i)    = TyVar <$> cleanIdentifier i
-typeCleanIdentifiers (Arrow a b)  =
-    Arrow <$> typeCleanIdentifiers a <*> typeCleanIdentifiers b
-typeCleanIdentifiers (TyCon c ts) =
-    TyCon c <$> mapM typeCleanIdentifiers ts
-
-
 instance Show Type where
-    showsPrec _ = showsType . runShw . typeCleanIdentifiers
-
-
-schemeCleanIdentifiers (Scheme as t) =
-    Scheme <$> mapM cleanIdentifier as <*> typeCleanIdentifiers t
+    showsPrec _ = showsType . cleanIdents
 
 showsScheme (Scheme [] t) = showsType t
 showsScheme (Scheme as t) =
     ("forall " ++) <<<
         foldr (\a -> ((shows a <<< (' ':)).)) id as <<<
-        (". " ++) <<< shows t
+        (". " ++) <<< showsType t
 
 instance Show TypeScheme where
-    showsPrec _ = showsScheme . runShw . schemeCleanIdentifiers
+    showsPrec _ = showsScheme . cleanIdents
     
 -- }}}
 
@@ -234,6 +212,10 @@ cleanIdentifier t@(IDD x n) = do
              put (bundle { candidate = cands
                          , replaceMap = (t, c0) : replaceMap bundle })
              return c0
+
+cleanIdents :: (Data t) => t -> t
+cleanIdents = runShw . everywhereM (mkM cleanIdentifier)
+
 
 -- }}}
 
