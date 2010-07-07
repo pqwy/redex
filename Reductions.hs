@@ -15,8 +15,7 @@ import Operations
 import Primitives
 
 import Control.Monad
-import "transformers" Control.Monad.Identity
-import "transformers" Control.Monad.Trans
+import "transformers" Data.Functor.Identity
 import "transformers" Control.Monad.Trans.State ( StateT(..) )
 import "transformers" Control.Monad.Trans.List
 import "monads-fd" Control.Monad.State 

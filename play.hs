@@ -1,4 +1,5 @@
 {-# LANGUAGE ViewPatterns, PatternGuards  #-}
+{-# LANGUAGE PackageImports  #-}
 {-# OPTIONS_GHC -fno-warn-overlapping-patterns #-}
 
 module Main where 
@@ -11,21 +12,24 @@ import Primitives
 import Graphs
 import Typer
 
+import Control.Arrow
+import Data.Generics
+
 import System.Environment
 
 import Control.Parallel.Strategies
 
 
 instance NFData Term where
-    rnf (ast -> Var x) = x `seq` ()
-    rnf (ast -> Lam x m) = x `seq` rnf m
+    rnf (ast -> Var x)     = x `seq` ()
+    rnf (ast -> Lam x m)   = x `seq` rnf m
     rnf (ast -> Let x e m) = x `seq` rnf e `seq` rnf m
-    rnf (ast -> App a b) = rnf a `seq` rnf b
-    rnf (ast -> Prim p) = p `seq` ()
+    rnf (ast -> App a b)   = rnf a `seq` rnf b
+    rnf (ast -> Prim p)    = p `seq` ()
 
 
 headWin :: (NFData a) => Strategy a -> [a] -> [a]
-headWin st [] = []
+headWin st []     = []
 headWin st (x:xs) = st x `seq` x : headWin st xs
 
 
@@ -41,7 +45,7 @@ test1 = anTest . whnf1
 test2 = anTest . whnf2
 
 anTest r | length run == 1000 = mapM_ print (take 50 run) >> putStrLn "\n** LOOP"
-         | otherwise = mapM_ print run
+         | otherwise          = mapM_ print run
     where run = take 1000 r
 
 
@@ -112,4 +116,47 @@ exp5 = read (globok ++ "(λn.iszero (minus n n)) (plus (succ (succ (succ (succ z
 backtrack1 :: Term
 backtrack1 = read "(let (K = |xy.x) (let (zero = |fx.x) zero (|nfx.n (|gh.h (g f)) (K x) (|x.x)) zero) (K (|ab.b))) (|ab.a) Y N"
 
+
+
+Right ty = Typer.typeOf predefEnv . read $
+        "let (map = |fl.if (isNil l) nil (cons (f (head l)) (map f (tail l))) ) map (|xf.f (pair foo (bop x)))"
+
+
+idx :: Ident -> [Int]
+idx (IDD _ n) = [n]
+idx _         = []
+
+unIdx :: Ident -> Ident
+unIdx (IDD s _) = ID s
+unIdx x         = x
+
+wee' :: Data t => t -> ([Int] -> [Int], t)
+wee' = gfoldl inj (\x -> (id, x))
+    where
+        inj (l, f) t = let (tis, tt) = wee' t in
+                ( l . tis . idx' tt , f (mkT unIdx tt) )
+
+        idx' :: Typeable t => t -> [Int] -> [Int]
+        idx' = mkQ id ((++) . idx)
+
+wee :: Data t => t -> ([Int], t)
+wee = first ($ []) . wee'
+
+
+-- {-# LANGUAGE RankNTypes  #-}
+
+--  woo :: Data t => t -> ([Int], t)
+--  woo = first ($ []) . fun
+--      where
+--          
+--          fun :: Data t => t -> ([Int] -> [Int], t)
+--          fun = gfoldl inj (\x -> (id, x))
+
+--          inj :: Data a => forall b. ([Int] -> [Int], a -> b) -> a -> ([Int] -> [Int], b)
+--          inj (l, f) t = ( l . tis . idx' tt, f (mkT unIdx tt) )
+--              where
+--                  (tis, tt) = fun t
+
+--          idx' :: Typeable t => t -> [Int] -> [Int]
+--          idx' = mkQ id ((++) . idx)
 

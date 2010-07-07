@@ -103,7 +103,7 @@ tp env (ast -> App e1 e2) ty s =
 
 tp env (ast -> Let x e1 e2) ty s =
     do a  <- newTyVar
---     s1 <- tp env e1 a s
+--     s1 <- tp env e1 a s  -- non-recursive let
        s1 <- tp ((x, Scheme [] a) : env) e1 a s
        tp ( (x, generalize env (s1 `substitute` a)) : env )
           e2 ty s1
