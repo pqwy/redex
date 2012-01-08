@@ -102,9 +102,9 @@ instance Read Term where
         where p = spaces *> ((,) <$> parseTerm <*> getInput)
 
 
-instance Applicative (GenParser t s) where
-    pure  = return
-    (<*>) = ap
+--  instance Applicative (GenParser t s) where
+--      pure  = return
+--      (<*>) = ap
 
 -- }}}
 
@@ -183,7 +183,7 @@ showsScheme (Scheme as t) =
 
 instance Show TypeScheme where
     showsPrec _ = showsScheme . cleanIdents
-    
+
 -- }}}
 
 -- {{{ ident render

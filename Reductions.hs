@@ -1,7 +1,7 @@
 {-# LANGUAGE ViewPatterns, PatternGuards  #-}
 {-# LANGUAGE PackageImports, GeneralizedNewtypeDeriving #-}
 {-# OPTIONS_GHC -fno-warn-overlapping-patterns #-}
-{-# LANGUAGE TypeSynonymInstances, MultiParamTypeClasses  #-}
+{-# LANGUAGE FlexibleInstances, TypeSynonymInstances, MultiParamTypeClasses  #-}
 
 module Reductions
     ( Reduceron, reduce, noenv

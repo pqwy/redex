@@ -9,7 +9,7 @@ import Stringy
 import Operations
 import Reductions
 import Primitives
-import Graphs
+--  import Graphs
 import Typer
 
 import Control.Arrow
@@ -18,6 +18,7 @@ import Data.Generics
 import System.Environment
 
 import Control.Parallel.Strategies
+import Control.DeepSeq
 
 
 instance NFData Term where
