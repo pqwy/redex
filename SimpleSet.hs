@@ -1,144 +1,91 @@
-{-# LANGUAGE ViewPatterns, PatternGuards  #-}
-{-# OPTIONS_GHC -fno-warn-overlapping-patterns #-}
-
+{-# LANGUAGE BangPatterns #-}
 module SimpleSet
     ( Set
-    , null, empty, singleton, fromList
+    , null, empty, singleton, fromList, size
     , insert, queryRemove, elem, remove
     , union, unions, intersection, subset
     ) where
 
-
 import Prelude hiding ( elem, null )
 import Data.List ( sort )
+import Data.Maybe
 
 
-cmp :: (Ord a) => a -> a -> Ordering
-cmp = flip compare
-
-
-
-newtype Set a = Set [a]
+data Set a = !a :+ !(Set a) | Nil
     deriving (Eq)
 
-
 instance (Show a) => Show (Set a) where
-    show (Set []) = "empty"
-    show (Set [a]) = "singleton " ++ show a
-    show (Set as) = "fromList " ++ show as
-
+    showsPrec _ Nil = ("empty" ++)
+    showsPrec _ set = showString "fromList [" . unroll set . showString "]"
+      where
+        unroll (a :+ Nil) = shows a
+        unroll (a :+ set) = shows a . showChar ',' . unroll set
 
 null :: Set a -> Bool
-null (Set []) = True
-null _ = False
+null Nil = True
+null _   = False
 
 empty :: Set a
-empty = Set []
+empty = Nil
 
 singleton :: a -> Set a
-singleton a = Set [a]
+singleton a = a :+ Nil
 
 fromList :: (Ord a) => [a] -> Set a
-fromList = Set . nub' . sort
+fromList = nub' . sort
+  where
+    nub' []  = Nil
+    nub' [a] = a :+ Nil
+    nub' (a:as@(b:_)) | a == b    = nub' as
+                      | otherwise = a :+ nub' as
 
-    where nub' [] = []
-          nub' as@[a] = as
-          nub' (a : as@(b:_)) | a == b = nub' as
-                              | otherwise = a : nub' as
-
+size :: Set a -> Int
+size = go 0 where go !n Nil     = n
+                  go !n (_:+as) = go (succ n) as
 
 insert :: (Ord a) => a -> Set a -> Set a
-insert a (Set s) = Set (doit s)
-
-    -- where doit [] = []
-    --       doit (x@(cmp a -> LT) : xs) = x : doit xs
-    --       doit s@((cmp a -> EQ) : _)  = s
-    --       doit s@((cmp a -> GT) : _)  = a : s
-
-    where doit [] = [a]
-          doit s@(x:xs) =
-              case a `compare` x of
-                   EQ -> s
-                   LT -> a : s
-                   GT -> x : doit xs
-
+insert a Nil = singleton a
+insert a xs@(x:+xs')
+    | x <  a    = x :+ insert a xs'
+    | x == a    = xs
+    | otherwise = a :+ xs
 
 queryRemove :: (Ord a) => a -> Set a -> Maybe (Set a)
-queryRemove a (Set xs) = Set `fmap` doit xs
-
-    -- where doit [] = Nothing
-    --       doit (x@(cmp a -> LT) : xs) = (x:) `fmap` doit xs
-    --       doit ((cmp a -> EQ) : xs)   = Just xs
-    --       doit ((cmp a -> GT) : _)    = Nothing
-
-    where doit [] = Nothing
-          doit (x:xs) =
-              case a `compare` x of
-                   EQ -> Just xs
-                   LT -> Nothing
-                   GT -> (x:) `fmap` doit xs
-
+queryRemove a Nil = Nothing
+queryRemove a xs@(x:+xs')
+    | x  < a    = (x:+) `fmap` queryRemove a xs'
+    | x == a    = Just xs'
+    | otherwise = Nothing
 
 elem :: (Ord a) => a -> Set a -> Bool
-elem a (queryRemove a -> Just _) = True
-elem a _ = False
-
+elem a = isJust . queryRemove a
 
 remove :: (Ord a) => a -> Set a -> Set a
-remove a (queryRemove a -> Just s) = s
-remove a s = s
-
+remove a s = fromMaybe s (queryRemove a s)
 
 union :: (Ord a) => Set a -> Set a -> Set a
-union (Set a) (Set b) = Set (doit a b)
-
-    -- where doit [] bs = bs
-    --       doit as [] = as
-    --       doit (a:as)   ((cmp a -> EQ) : bs)   = a : doit as bs
-    --       doit as@(a:_) (b@(cmp a -> LT) : bs) = b : doit as bs
-    --       doit (a:as)   bs@((cmp a -> GT) : _) = a : doit as bs
-
-    where doit [] bs = bs
-          doit as [] = as
-          doit a'@(a:as) b'@(b:bs) =
-              case a `compare` b of
-                   EQ -> a : doit as bs
-                   LT -> a : doit as b'
-                   GT -> b : doit a' bs
-
+union Nil bs  = bs
+union as  Nil = as
+union as@(a:+as') bs@(b:+bs') =
+    case a `compare` b of
+         LT -> a :+ union as' bs
+         EQ -> a :+ union as' bs'
+         GT -> b :+ union as  bs'
 
 unions :: (Ord a) => [Set a] -> Set a
 unions = foldr union empty
 
-
 intersection :: (Ord a) => Set a -> Set a -> Set a
-intersection (Set a) (Set b) = Set (doit a b)
-
-    -- where doit (a:as)   ((cmp a -> EQ) : bs)   = a : doit as bs
-    --       doit (a:as)   bs@((cmp a -> GT) : _) = doit as bs
-    --       doit as@(a:_) ((cmp a -> LT) : bs)   = doit as bs
-    --       doit _ _ = []
-
-    where doit a'@(a:as) b'@(b:bs) =
-              case a `compare` b of
-                   EQ -> a : doit as bs
-                   LT -> doit as b'
-                   GT -> doit a' bs
-          doit _ _ = []
-
+intersection as@(a:+as') bs@(b:+bs')
+    | a <  b    =      intersection as' bs
+    | a == b    = a :+ intersection as' bs'
+    | otherwise =      intersection as bs'
+intersection _ _ = Nil
 
 subset :: (Ord a) => Set a -> Set a -> Bool
-subset (Set a) (Set b) = doit a b
-
-    where doit [] _ = True
-          doit a'@(a:as) (b:bs) =
-              case a `compare` b of
-                   EQ -> doit as bs
-                   LT -> False
-                   GT -> doit a' bs
-
-    -- where doit [] _ = True
-    --       doit as@(a:_) ((cmp a -> LT) : bs) = doit as bs
-    --       doit (a:as)   ((cmp a -> EQ) : bs) = doit as bs
-    --       doit (a:_)    ((cmp a -> GT) : _)  = False
+subset Nil _ = True
+subset as@(a:+as') bs@(b:+bs')
+    | a  < b    = False
+    | a == b    = subset as' bs'
+    | otherwise = subset as bs'
 
