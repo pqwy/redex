@@ -1,5 +1,6 @@
 {-# LANGUAGE ViewPatterns, PatternGuards  #-}
 {-# LANGUAGE PackageImports  #-}
+{-# LANGUAGE QuasiQuotes  #-}
 {-# OPTIONS_GHC -fno-warn-overlapping-patterns #-}
 
 module Main where 
@@ -8,11 +9,11 @@ import Ast
 import Stringy
 import Operations
 import Reductions
-import Primitives
+--  import Primitives
 --  import Graphs
 import Typer
 
-import Control.Arrow
+import Control.Arrow hiding (app)
 import Data.Generics
 
 import System.Environment
@@ -26,7 +27,7 @@ instance NFData Term where
     rnf (ast -> Lam x m)   = x `seq` rnf m
     rnf (ast -> Let x e m) = x `seq` rnf e `seq` rnf m
     rnf (ast -> App a b)   = rnf a `seq` rnf b
-    rnf (ast -> Prim p)    = p `seq` ()
+--      rnf (ast -> Prim p)    = p `seq` ()
 
 
 headWin :: (NFData a) => Strategy a -> [a] -> [a]
@@ -34,12 +35,10 @@ headWin st []     = []
 headWin st (x:xs) = st x `seq` x : headWin st xs
 
 
-
-problem1, problem2, problem3, problem4 :: Term
-problem1 = read "(let (a = λq.q) (b = λo.o) a b c) P Q"
-problem2 = read "(λf.(λw.f (w w)) λu.f (u u)) (λsx.s) P Q R"
-problem3 = read "let (y = λf.f (y f)) y (λsx.s x x) A"
-problem4 = read "(λf.(λw.f (w w)) λu.f (u u)) (λsx.s x x) A"
+problem1 = [funn| (let (a = λq.q) (b = λo.o) a b c) P Q      |]
+problem2 = [funn| (λf.(λw.f (w w)) λu.f (u u)) (λsx.s) P Q R |]
+problem3 = [funn| let (y = λf.f (y f)) y (λsx.s x x) A       |]
+problem4 = [funn| (λf.(λw.f (w w)) λu.f (u u)) (λsx.s x x) A |]
 
 test1, test2 :: Term -> IO ()
 test1 = anTest . whnf1
@@ -58,7 +57,6 @@ main = undefined
 --                         "thr" -> whnf3
 --                         "fou" -> whnf4 
 --     print $ (rnf `headWin` fun problem3) !! (read n)
-
 
 globok =
     " let (o = λfgx.f (g x))                                    \

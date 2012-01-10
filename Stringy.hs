@@ -5,12 +5,13 @@
 module Stringy
     ( showsLam, parseLambda, parseLambdaOrValidatePrefix
     , showsType, showsScheme
+    , funn
     ) where
 
 
 import Ast
 import Operations
-import Primitives
+--  import Primitives
 
 import Data.Function
 import Control.Category ( (>>>), (<<<) )
@@ -27,11 +28,18 @@ import "monads-fd" Control.Monad.State
 import Data.Data
 import Data.Generics
 
+import qualified Language.Haskell.TH        as TH
+import qualified Language.Haskell.TH.Syntax as TH
+import qualified Language.Haskell.TH.Quote  as QQ
+
 -- in {{{
 
+surrounded :: Parser a -> Parser b -> Parser c -> Parser c
+surrounded open close p = open *> spaces *> p <* spaces <* close
+-- surrounded p = try (open *> spaces) *> p <* spaces <* close
+
 bracketed :: Parser a -> Parser a
-bracketed p = char '(' *> spaces *> p <* spaces <* char ')'
--- bracketed p = try (char '(' *> spaces) *> p <* spaces <* char ')'
+bracketed = surrounded (char '(') (char ')')
 
 nonWS :: Parser String
 nonWS = many1 (noneOf " \t\n")
@@ -39,10 +47,12 @@ nonWS = many1 (noneOf " \t\n")
 
 parseTerm, parseSingleTerm, parseLam, parseVar, parseLet :: Parser Term
 
-parseTerm = foldl1 app <$> many1 (parseSingleTerm <* spaces <?> "term")
+parseTerm = spaces *>
+            (foldl1 app <$> many1 (parseSingleTerm <* spaces <?> "term"))
 
 parseSingleTerm = bracketed parseTerm <|> parseLam <|> parseLet
-              <|> parseNum <|> try parsePrimOp <|> parseVar
+--                <|> parseNum <|> try parsePrimOp
+              <|> parseVar
 
 lambda = oneOf "\\|λ"
 
@@ -52,12 +62,12 @@ parseLam = do
 
 parseVar = var <$> largeVar
 
-parseNum = prim . num . read <$> many1 digit <?> "numeral"
+--  parseNum = prim . num . read <$> many1 digit <?> "numeral"
 
-parsePrimOp = nonWS >>= \tok ->
-                case lookup tok prims of
-                     Nothing -> fail "unknown op"
-                     Just p  -> pure (prim p)
+--  parsePrimOp = nonWS >>= \tok ->
+--                  case lookup tok prims of
+--                       Nothing -> fail "unknown op"
+--                       Just p  -> pure (prim p)
 
 parseLet = flip (foldr (uncurry leet))
        <$> (try (string "let") *> spaces *> many1 (try (binder <* spaces)))
@@ -99,23 +109,43 @@ unexpectedEOF = any unexpected . errorMessages
 
 instance Read Term where
     readsPrec _ = either (const []) (:[]) . parse p "<literal>"
-        where p = spaces *> ((,) <$> parseTerm <*> getInput)
+        where p = ((,) <$> parseTerm <*> getInput)
+
+instance TH.Lift Term where
+    lift = QQ.dataToQa patch TH.litE (foldl TH.appE) (const Nothing)
+      where
+        patch n | isTermCtor (TH.nameBase n) = TH.varE n
+                | otherwise                  = TH.conE n
+
+funn :: QQ.QuasiQuoter
+funn = qqlift "funn" parseTerm
 
 
---  instance Applicative (GenParser t s) where
---      pure  = return
---      (<*>) = ap
+qqlift :: TH.Lift t => String -> Parser t -> QQ.QuasiQuoter
+qqlift name p =
+    QQ.QuasiQuoter
+        (either (\e -> error $ "\n" ++ show e ++ "\n") TH.lift
+            . parse (p <* eof) "Quoted term")
+        e e e
+  where
+    e = error $ name ++ ": quasiquoter defined only for expression contexts."
 
 -- }}}
 
 -- out lam {{{
 
-bracketIfComposite, showsLam :: Term -> ShowS
+surround :: String -> String -> ShowS -> ShowS
+surround open close between = (open ++) <<< between <<< (close ++)
 
-bracketIfComposite t@(ast -> Var _)    = showsLam t
-bracketIfComposite t@(ast -> Prim _)   = showsLam t
-bracketIfComposite t@(ast -> Mark _ _) = showsLam t
-bracketIfComposite t                   = showParen True (showsLam t)
+parens :: ShowS -> ShowS
+parens = surround "(" ")"
+
+group, showsLam :: Term -> ShowS
+
+group t@(ast -> Var _)    = showsLam t
+--  group t@(ast -> Prim _)   = showsLam t
+group t@(ast -> Mark _ _) = showsLam t
+group t                   = parens (showsLam t)
 
 
 showsLam (ast -> Var x) = shows x
@@ -123,11 +153,11 @@ showsLam (ast -> Var x) = shows x
 showsLam (ast -> App l r) =
     ( case ast l of
            App _ _ -> showsLam l
-           _       -> bracketIfComposite l )
-    <<< (' ' :) <<< bracketIfComposite r
+           _       -> group l )
+    <<< (' ' :) <<< group r
 
 showsLam (ast -> Lam x t) =
-    ('|' :) <<< shows x <<<
+    ('λ' :) <<< shows x <<<
     fix ( \f t -> case ast t of
             Lam x t' -> shows x <<< f t'
             _        -> ('.' :) <<< showsLam t ) t
@@ -138,14 +168,14 @@ showsLam t@(ast -> Let _ _ _) =
             Let x e t' -> binder x e <<< f t'
             _          -> showsLam t ) t
 
-    where binder x e = showParen True ( shows x <<< (" = "++) <<< showsLam e ) <<< (' ' :)
+    where binder x e = parens ( shows x <<< (" = "++) <<< showsLam e ) <<< (' ' :)
 
-showsLam (ast -> Prim p) = showPrimRep (primrep p)
-    where showPrimRep = (++)
+--  showsLam (ast -> Prim p) = showPrimRep (primrep p)
+--      where showPrimRep = (++)
 
-showsLam (ast -> Mark Nothing t) = (" [ "++) <<< showsLam t <<< (" ] "++)
-showsLam (ast -> Mark (Just s) t) =
-    ((" [ " ++ s ++ ": ")++) <<< showsLam t <<< (" ] "++)
+showsLam (ast -> Mark tag t) = surround open "]" (showsLam t)
+  where
+    open = maybe " [ " (("[ "++) . (++ ": ")) tag
 
 
 instance Show Term where
@@ -159,7 +189,7 @@ brk, showsType :: Type -> ShowS
 
 brk t@(TyVar _)    = showsType t
 brk t@(TyCon _ []) = showsType t
-brk t              = showParen True (showsType t)
+brk t              = parens (showsType t)
 
 showsType (TyVar i) = shows i
 showsType (Arrow t1 t2) =
