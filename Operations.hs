@@ -1,6 +1,5 @@
 {-# LANGUAGE ViewPatterns, PatternGuards  #-}
 {-# LANGUAGE PackageImports #-}
-{-# OPTIONS_GHC -fno-warn-overlapping-patterns #-}
 
 module Operations
     ( substitute, leet

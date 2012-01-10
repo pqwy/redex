@@ -21,7 +21,7 @@ data LambdaRep = Var Ident | App Lambda Lambda | Lam Ident Lambda
 
 
 freeVars :: Term -> Set Ident
-freeVars (Var_ x)      = singleton x
+freeVars (Var_ x     ) = singleton x
 freeVars (App_ xs _ _) = xs
 freeVars (Lam_ xs _ _) = xs
 

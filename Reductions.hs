@@ -12,7 +12,7 @@ module Reductions
 
 import Ast
 import Operations
-import Primitives
+--  import Primitives
 
 import Control.Monad
 import "transformers" Data.Functor.Identity
@@ -41,7 +41,7 @@ whnf beta t@(ast -> Var x) =
     resolveM x >>= ( maybe (pure t) $ \e' ->
         whnf beta e' >>= \t' -> assertM x t' *> pure t' )
 
-whnf beta t@(ast -> Prim _) = pure t
+--  whnf beta t@(ast -> Prim _) = pure t
 
 
 
