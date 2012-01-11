@@ -1,185 +1,137 @@
 {-# LANGUAGE ViewPatterns  #-}
+{-# LANGUAGE TypeSynonymInstances, FlexibleInstances #-}
+{-# LANGUAGE UndecidableInstances  #-}
 {-# LANGUAGE PackageImports  #-}
 {-# OPTIONS_GHC -fno-warn-overlapping-patterns #-}
 
-module Stringy
-    ( showsLam, parseLambda, parseLambdaOrValidatePrefix
+module Stringy (
+      showsAST, parseAST, tryParseAST
     , showsType, showsScheme
     , funn
-    ) where
-
+) where
 
 import Ast
-import Operations
---  import Primitives
+
+import Data.Functor.Identity
 
 import Data.Function
 import Control.Category ( (>>>), (<<<) )
 
 import Text.ParserCombinators.Parsec hiding ( State(..) )
--- import Text.Parsec.String
-
 import Text.ParserCombinators.Parsec.Error ( Message(..), errorMessages )
 
-import Control.Monad
 import Control.Applicative hiding ( Alternative(..), many )
 import "monads-fd" Control.Monad.State
 
-import Data.Data
 import Data.Generics
 
-import qualified Language.Haskell.TH        as TH
-import qualified Language.Haskell.TH.Syntax as TH
 import qualified Language.Haskell.TH.Quote  as QQ
 
 -- in {{{
 
-surrounded :: Parser a -> Parser b -> Parser c -> Parser c
-surrounded open close p = open *> spaces *> p <* spaces <* close
--- surrounded p = try (open *> spaces) *> p <* spaces <* close
+cleanSpaces :: Parser a -> Parser a
+cleanSpaces p = spaces *> p <* spaces
 
-bracketed :: Parser a -> Parser a
-bracketed = surrounded (char '(') (char ')')
+bracketed :: Parser a -> Parser b -> Parser c -> Parser c
+bracketed open close p = open *> cleanSpaces p <* close
 
-nonWS :: Parser String
-nonWS = many1 (noneOf " \t\n")
+paren'd :: Parser a -> Parser a
+paren'd = bracketed (char '(') (char ')')
 
+pIdent :: Parser Ident
+pIdent = cleanSpaces ( ((ident.) . (:)) <$> letter <*> many alphaNum <?> "variable" )
 
-parseTerm, parseSingleTerm, parseLam, parseVar, parseLet :: Parser Term
+lambda :: Parser ()
+lambda = () <$ oneOf "\\|λ"
 
-parseTerm = spaces *>
-            (foldl1 app <$> many1 (parseSingleTerm <* spaces <?> "term"))
+pTerm, pAtom, pLambda, pVar, pLet, pTermEND :: Parser AST
 
-parseSingleTerm = bracketed parseTerm <|> parseLam <|> parseLet
---                <|> parseNum <|> try parsePrimOp
-              <|> parseVar
+pVar  = var <$> pIdent
 
-lambda = oneOf "\\|λ"
+pTerm = foldl1 app <$> many1 ( pAtom <?> "term" )
 
-parseLam = do
-    vars <- lambda *> spaces *> smallVar `sepEndBy1` spaces <* char '.'
-    spaces *> (flip (foldr lam) vars <$> parseTerm)
+pAtom = spaces *> ( paren'd pTerm <|> pLambda <|> pLet <|> pVar ) <* spaces -- closing space??
 
-parseVar = var <$> largeVar
+pLambda = do
+    vars <- lambda *> many1 pIdent <* char '.'
+    flip (foldr lam) vars <$> pTerm
 
---  parseNum = prim . num . read <$> many1 digit <?> "numeral"
+pLet = flip (foldr (uncurry let_))
+        <$> (try (string "let") *> many1 (try binder))
+        <*> pTerm
+  where
+    binder = cleanSpaces ( paren'd ((,) <$> pIdent <* string "=" <*> pTerm) )
 
---  parsePrimOp = nonWS >>= \tok ->
---                  case lookup tok prims of
---                       Nothing -> fail "unknown op"
---                       Just p  -> pure (prim p)
+pTermEND = pTerm <* eof
 
-parseLet = flip (foldr (uncurry leet))
-       <$> (try (string "let") *> spaces *> many1 (try (binder <* spaces)))
-       -- <$> (try (string "let") *> spaces *> many1 (binder <* spaces))
-       <*> parseTerm
+parseAST :: SourceName -> String -> Either ParseError AST
+parseAST n s = parse pTerm n s
 
-    where binder = bracketed ((,) <$> largeVar <* eq <*> parseTerm)
-    -- where binder = bracketed ((,) <$> try (largeVar <* eq) <*> parseTerm)
-          eq = spaces *> string "=" *> spaces
+tryParseAST :: SourceName -> String -> Either ParseError (Maybe AST)
+tryParseAST n s = case parseAST n s of
+                       Left e | unexpectedEOF e -> Right Nothing
+                              | otherwise       -> Left e
+                       ast                      -> Just <$> ast
 
-
-smallVar, largeVar :: Parser Ident
-
--- smallVar = (:[]) <$> letter <?> "short variable"
-smallVar = (\c -> ident . (c:)) <$> letter <*> (many digit <|> pure [])
-                                <?> "short variable"
-
-largeVar = (\c -> ident . (c:)) <$> letter <*> many alphaNum <?> "variable"
-
-
-
-
-parseLambda :: SourceName -> String -> Either ParseError Term
-parseLambda n s = parse parseTerm n s
-
-parseLambdaOrValidatePrefix :: SourceName -> String -> Either ParseError (Maybe Term)
-parseLambdaOrValidatePrefix n s =
-
-    case parseLambda n s of
-         Left e | unexpectedEOF e -> Right Nothing
-                | otherwise       -> Left e
-         r                        -> Just <$> r
-
+unexpectedEOF :: ParseError -> Bool
 unexpectedEOF = any unexpected . errorMessages
     where
         unexpected (SysUnExpect "") = True
         unexpected _                = False
 
 
-instance Read Term where
-    readsPrec _ = either (const []) (:[]) . parse p "<literal>"
-        where p = ((,) <$> parseTerm <*> getInput)
-
-instance TH.Lift Term where
-    lift = QQ.dataToQa patch TH.litE (foldl TH.appE) (const Nothing)
-      where
-        patch n | isTermCtor (TH.nameBase n) = TH.varE n
-                | otherwise                  = TH.conE n
+instance Read AST where
+    readsPrec _ = either (const []) (:[]) . parse p "<literal>" where
+              p = (,) <$> pTermEND <*> getInput
 
 funn :: QQ.QuasiQuoter
-funn = qqlift "funn" parseTerm
-
-
-qqlift :: TH.Lift t => String -> Parser t -> QQ.QuasiQuoter
-qqlift name p =
-    QQ.QuasiQuoter
-        (either (\e -> error $ "\n" ++ show e ++ "\n") TH.lift
-            . parse (p <* eof) "Quoted term")
-        e e e
+funn = QQ.QuasiQuoter (either (\e -> error $ "\n" ++ show e ++ "\n")
+                              (QQ.dataToExpQ (\_ -> Nothing))
+                              . parse pTermEND "Quoted term")
+                      no no no
   where
-    e = error $ name ++ ": quasiquoter defined only for expression contexts."
+    no = error $ "funn: quasiquoter defined only for expression contexts."
 
 -- }}}
 
 -- out lam {{{
 
-surround :: String -> String -> ShowS -> ShowS
-surround open close between = (open ++) <<< between <<< (close ++)
+bracket :: String -> String -> ShowS -> ShowS
+bracket open close between = (open ++) <<< between <<< (close ++)
 
 parens :: ShowS -> ShowS
-parens = surround "(" ")"
+parens = bracket "(" ")"
 
-group, showsLam :: Term -> ShowS
+showsAtom, showsAtom :: ASTAnn f => Term f -> ShowS
 
-group t@(ast -> Var _)    = showsLam t
---  group t@(ast -> Prim _)   = showsLam t
-group t@(ast -> Mark _ _) = showsLam t
-group t                   = parens (showsLam t)
+showsAtom t@(ast -> Var _)    = showsAST t
+showsAtom t                   = parens (showsAST t)
 
+showsAST (ast -> Var x) = shows x
 
-showsLam (ast -> Var x) = shows x
-
-showsLam (ast -> App l r) =
+showsAST (ast -> App l r) =
     ( case ast l of
-           App _ _ -> showsLam l
-           _       -> group l )
-    <<< (' ' :) <<< group r
+           App _ _ -> showsAST  l
+           _       -> showsAtom l )
+    <<< (' ' :) <<< showsAtom r
 
-showsLam (ast -> Lam x t) =
+showsAST (ast -> Lam x t) =
     ('λ' :) <<< shows x <<<
     fix ( \f t -> case ast t of
             Lam x t' -> shows x <<< f t'
-            _        -> ('.' :) <<< showsLam t ) t
+            _        -> ('.' :) <<< showsAST t ) t
 
-showsLam t@(ast -> Let _ _ _) =
+showsAST t@(ast -> Let _ _ _) =
     ("let " ++) <<<
     fix ( \f t -> case ast t of
             Let x e t' -> binder x e <<< f t'
-            _          -> showsLam t ) t
-
-    where binder x e = parens ( shows x <<< (" = "++) <<< showsLam e ) <<< (' ' :)
-
---  showsLam (ast -> Prim p) = showPrimRep (primrep p)
---      where showPrimRep = (++)
-
-showsLam (ast -> Mark tag t) = surround open "]" (showsLam t)
+            _          -> showsAST t ) t
   where
-    open = maybe " [ " (("[ "++) . (++ ": ")) tag
+    binder x e = parens ( shows x <<< (" = "++) <<< showsAST e ) <<< (' ' :)
 
 
-instance Show Term where
-    showsPrec _ = showsLam . cleanIdents
+instance (Data (Term f), ASTAnn f) => Show (Term f) where
+    showsPrec _ = showsAST . cleanIdents
 
 -- }}}
 
@@ -202,14 +154,15 @@ showsType (TyCon c []) = (c ++)
 showsType (TyCon c ts) =
     (c ++) <<< foldr (\s k -> (' ':) . s . k) id (map brk ts)
 
-instance Show Type where
-    showsPrec _ = showsType . cleanIdents
-
 showsScheme (Scheme [] t) = showsType t
 showsScheme (Scheme as t) =
     ("forall " ++) <<<
         foldr (\a -> ((shows a <<< (' ':)).)) id as <<<
         (". " ++) <<< showsType t
+
+
+instance Show Type where
+    showsPrec _ = showsType . cleanIdents
 
 instance Show TypeScheme where
     showsPrec _ = showsScheme . cleanIdents
@@ -218,20 +171,23 @@ instance Show TypeScheme where
 
 -- {{{ ident render
 
-data IdentRenderState = IRS { candidate, takenGen0, takenGen1 :: [Ident]
-                            , replaceMap :: [(Ident, Ident)] }
+data IdentRenderState =
+    IRS { candidate, takenGen0, takenGen1 :: [Ident]
+        , replaceMap                      :: [(Ident, Ident)]
+        }
+
 type Shw a = State IdentRenderState a
 
+runShw :: State IdentRenderState c -> c
 runShw sh = (fst . fix) (\ ~(_, s) -> runState sh
-                                IRS { candidate = [ ident [x] | x <- ['a'..] ]
-                                    , takenGen1 = takenGen0 s
-                                    , takenGen0 = [], replaceMap = [] } )
-
+                                IRS { candidate  = [ ident [x] | x <- ['a'..] ]
+                                    , takenGen1  = takenGen0 s
+                                    , takenGen0  = []
+                                    , replaceMap = [] } )
 
 cleanIdentifier :: Ident -> Shw Ident
 cleanIdentifier t@(ID _) =
         modify (\s -> s { takenGen0 = t : takenGen0 s }) >> return t
-
 cleanIdentifier t@(IDD x n) = do
     bundle <- get
     case t `lookup` replaceMap bundle of
@@ -239,13 +195,12 @@ cleanIdentifier t@(IDD x n) = do
          Nothing -> do
              let (c0:cands) = dropWhile (`elem` takenGen1 bundle)
                                         (candidate bundle)
-             put (bundle { candidate = cands
-                         , replaceMap = (t, c0) : replaceMap bundle })
+             put bundle { candidate  = cands
+                        , replaceMap = (t, c0) : replaceMap bundle }
              return c0
 
 cleanIdents :: (Data t) => t -> t
 cleanIdents = runShw . everywhereM (mkM cleanIdentifier)
-
 
 -- }}}
 
