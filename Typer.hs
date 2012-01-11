@@ -7,8 +7,9 @@ module Typer
     ( TypeEnv, tp, typeOf, predefEnv
     ) where
 
-import Ast hiding ( unions )
+import Ast
 import Stringy
+import Random
 
 import Data.List ( intercalate, (\\), union )
 import "transformers" Control.Monad.Trans.State
@@ -33,11 +34,11 @@ newtype T a = T (StateT Ident (Either String) a)
     deriving (Functor, Monad, MonadError String, Applicative)
 
 runT :: T a -> Either String a
-runT (T s) = s `evalStateT` nextId (ident "a")
+runT (T s) = s `evalStateT` variateIdent (ident "a")
 
 
 newTyVar :: T Type
-newTyVar = TyVar <$> T (get >>= \x -> x <$ put (nextId x))
+newTyVar = TyVar <$> T (get >>= \x -> x <$ put (variateIdent x))
 
 newInstance :: TypeScheme -> T Type
 newInstance (Scheme ids ty) =
@@ -83,7 +84,7 @@ mgu t u s = case (s `substitute` t, s `substitute` u) of
          (t', u') -> throwError ( "cannot unify " ++ showRaw t' ++ " with " ++ showRaw u' )
 
 
-tp :: TypeEnv -> Term -> Type -> Subst -> T Subst
+tp :: ASTAnn f => TypeEnv -> Term f -> Type -> Subst -> T Subst
 
 tp env (ast -> Var x) ty s =
     case x `lookup` env of
@@ -96,7 +97,7 @@ tp env (ast -> Lam x e1) ty s =
        b <- newTyVar
        ( mgu ty (Arrow a b) >=>
            tp ((x, Scheme [] a) : env) e1 b ) s
-    
+
 tp env (ast -> App e1 e2) ty s =
     do a <- newTyVar
        ( tp env e1 (Arrow a ty) >=> tp env e2 a ) s
@@ -109,7 +110,7 @@ tp env (ast -> Let x e1 e2) ty s =
           e2 ty s1
 
 
-typeOf :: TypeEnv -> Term -> Either String TypeScheme
+typeOf :: ASTAnn f => TypeEnv -> Term f -> Either String TypeScheme
 typeOf env expr = runT
     ( newTyVar >>= \a ->
         tp env expr a emptySubst $>
@@ -122,6 +123,7 @@ showRaw = (`showsType` "")
 
 
 
+predefEnv :: TypeEnv
 predefEnv = [ (ident tc, generalize [] t) | (tc, t) <- env ]
     where
         bool     = TyCon "Bool" []
@@ -163,7 +165,7 @@ letZip  = "let ( zip = |fxy.if (isNil x) nil (if (isNil y) nil (cons (f (head x)
 letZip' = "let ( zip = fix (|zfxy.if (isNil x) nil (if (isNil y) nil (cons (f (head x) (head y)) (z f (tail x) (tail y))))) ) "
 
 
-expn :: [Term]
+expn :: [AST]
 expn = map read [ "|x.cons x nil" ]
 
 

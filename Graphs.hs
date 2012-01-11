@@ -3,11 +3,10 @@
 {-# LANGUAGE DoRec  #-}
 {-# OPTIONS_GHC -fno-warn-overlapping-patterns #-}
 
-module Graphs
-    ( graph, plotIt )
-    where
+module Graphs ( graph, plot ) where
 
 import Ast
+import Stringy
 
 import Data.Graph.Inductive
 
@@ -29,8 +28,9 @@ data RelType = Fun | Arg | Formal | Body
     deriving (Show, Eq)
 
 
-graph :: (DynGraph g) => Term -> g NodeType RelType
-graph t = let (_, ns, es) = evalState (termGraph t) (0, []) in mkGraph ns es
+graph :: (DynGraph g) => AST -> g NodeType RelType
+graph t = let (_, ns, es) = evalState (termGraph t) (0, [])
+          in mkGraph ns es
 
 
 type GProc = State (Int, [(Ident, Int)]) 
@@ -40,14 +40,13 @@ label :: GProc Int
 label = gets fst <* modify (first succ)
 
 extend :: Ident -> Int -> GProc a -> GProc a
-extend x n a =
-    modify (second ((x, n):)) *> a <* modify (second tail)
+extend x n a = modify (second ((x, n):)) *> a <* modify (second tail)
 
 resolve :: Ident -> GProc (Maybe Int)
 resolve x = gets (lookup x . snd)
 
 
-termGraph :: Term -> GProc (Int, [LNode NodeType], [LEdge RelType])
+termGraph :: AST -> GProc (Int, [LNode NodeType], [LEdge RelType])
 
 termGraph (ast -> Lam x m) = do
     n             <- label
@@ -68,24 +67,19 @@ termGraph (ast -> App a b) = do
     return ( n, nodes, edges )
 
 termGraph (ast -> Var x) =
-    resolve x >>= \x' -> case x' of
-            Nothing -> label >>= \n -> return (n, [(n, NVar x)], [])
-            Just n  -> return (n, [], [])
+    resolve x >>= (label >>= \n -> return (n, [(n, NVar x)], []))
+                    `maybe` (\n -> return (n, [], []))
 
 termGraph (ast -> Let x e m) = do
-    rec (labe, ens, ees) <-
-            extend x labe $ termGraph e
+    rec (labe, ens, ees) <- extend x labe $ termGraph e
 
-    (labm, mns, mes) <-
-        extend x labe $ termGraph m
+    (labm, mns, mes)     <- extend x labe $ termGraph m
 
     return (labm, ens ++ mns, ees ++ mes)
 
 
-
-plotIt :: FilePath -> Term -> IO (Either String FilePath)
-plotIt p t = runGraphviz dot Png p
-
-    where gr = graph t :: Gr NodeType RelType
-          dot = graphToDot True gr [] (const []) (const [])
+plot :: FilePath -> AST -> IO FilePath
+plot path term = runGraphviz (graphToDot nonClusteredParams
+                                         (graph term :: Gr NodeType RelType))
+                             Png path
 

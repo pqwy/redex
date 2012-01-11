@@ -35,22 +35,28 @@ variateIdent (IDD x n) = IDD x (succ n)
 
 -- {{{  Terms
 
-data Term f = T (f (Node f))
+data Term f = Term (f (Node f))
 
 data Node f = Var Ident
             | App (Term f) (Term f)
             | Lam Ident (Term f)
             | Let Ident (Term f) (Term f)
---              | Mark (Maybe String) (Term f)
 
 type AST = Term Identity
 
 toAST :: Node Identity -> AST
-toAST = T . Identity
+toAST = Term . Identity
 
+var :: Ident -> AST
 var  = toAST       . Var
+
+app :: AST -> AST -> AST
 app  = (toAST.)    . App
+
+lam :: Ident -> AST -> AST
 lam  = (toAST.)    . Lam
+
+let_ :: Ident -> AST -> AST -> AST
 let_ = ((toAST.).) . Let
 
 class ASTAnn a where strip :: a (Node a) -> Node a
@@ -58,7 +64,7 @@ class ASTAnn a where strip :: a (Node a) -> Node a
 instance ASTAnn Identity where strip = runIdentity
 
 ast :: ASTAnn f => Term f -> Node f
-ast (T fn) = strip fn
+ast (Term fn) = strip fn
 
 
 -- Morbid instances.
@@ -87,7 +93,6 @@ deriving instance Data a => Data (Identity a)
 --              | App (Term a) (Term a)
 --              | Lam Ident (Term a)
 --              | Let Ident (Term a) (Term a)
---              | Mark (Maybe String) (Term a)
 --      deriving (Typeable, Data)
 
 -- }}}
