@@ -12,10 +12,8 @@ module Stringy (
 
 import Ast
 
-import Data.Functor.Identity
-
 import Data.Function
-import Control.Category ( (>>>), (<<<) )
+import Control.Category ( (<<<) )
 
 import Text.ParserCombinators.Parsec hiding ( State(..) )
 import Text.ParserCombinators.Parsec.Error ( Message(..), errorMessages )
@@ -102,7 +100,7 @@ bracket open close between = (open ++) <<< between <<< (close ++)
 parens :: ShowS -> ShowS
 parens = bracket "(" ")"
 
-showsAtom, showsAtom :: ASTAnn f => Term f -> ShowS
+showsAtom, showsAST :: ASTAnn f => Term f -> ShowS
 
 showsAtom t@(ast -> Var _)    = showsAST t
 showsAtom t                   = parens (showsAST t)
@@ -188,7 +186,7 @@ runShw sh = (fst . fix) (\ ~(_, s) -> runState sh
 cleanIdentifier :: Ident -> Shw Ident
 cleanIdentifier t@(ID _) =
         modify (\s -> s { takenGen0 = t : takenGen0 s }) >> return t
-cleanIdentifier t@(IDD x n) = do
+cleanIdentifier t@(IDD _ _) = do
     bundle <- get
     case t `lookup` replaceMap bundle of
          Just t' -> return t'
