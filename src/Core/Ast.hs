@@ -2,17 +2,17 @@
 {-# LANGUAGE ScopedTypeVariables  #-}
 {-# LANGUAGE UndecidableInstances  #-}
 
-module Ast (
+module Core.Ast (
       Ident (..), ident, variateIdent
     , Term (..), Node (..), AST, ast
     , ASTAnn (..), toAST, var, app, lam, let_
     , Type (..), TypeScheme (..)
 ) where
 
-import Data.Typeable -- ( Typeable )
-import Data.Data    --  ( Data )
-
+import Data.Data
 import Data.Functor.Identity
+
+import Data.String ( IsString (..) )
 
 -- {{{  Identifiers
 
@@ -30,6 +30,8 @@ ident = ID
 variateIdent :: Ident -> Ident
 variateIdent (ID  x  ) = IDD x 0
 variateIdent (IDD x n) = IDD x (succ n)
+
+instance IsString Ident where fromString = ident
 
 -- }}}
 
@@ -78,6 +80,7 @@ instance Typeable1 f => Typeable (Term f) where
 instance Typeable1 f => Typeable (Node f) where
     typeOf _ = tc "Node" `mkTyConApp` [typeOf1 (undefined :: f ())]
 
+-- These two are, naturally, undecidable.
 deriving instance (Typeable (Term f), Data (f (Node f))) => Data (Term f)
 deriving instance (Typeable (Node f), Data (Term f)) => Data (Node f)
 

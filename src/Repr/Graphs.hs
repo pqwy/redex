@@ -1,19 +1,17 @@
 {-# LANGUAGE ViewPatterns, PatternGuards  #-}
-{-# LANGUAGE PackageImports, GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE DoRec  #-}
-{-# OPTIONS_GHC -fno-warn-overlapping-patterns #-}
 
-module Graphs ( graph, plot ) where
+module Repr.Graphs ( graph, plot ) where
 
-import Ast
-import Stringy
+import Core.Ast
+import Repr.Stringy
 
 import Data.Graph.Inductive
 
 import Control.Monad
 import Control.Monad.Fix
-import "transformers" Control.Monad.Trans.State
---  import "transformers" Control.Monad.Identity
+import Control.Monad.Trans.State
 
 import Control.Applicative hiding ( Alternative(..) )
 import Control.Arrow ( first, second )

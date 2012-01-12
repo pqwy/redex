@@ -4,13 +4,13 @@
 {-# LANGUAGE PackageImports  #-}
 {-# OPTIONS_GHC -fno-warn-overlapping-patterns #-}
 
-module Stringy (
+module Repr.Stringy (
       showsAST, parseAST, tryParseAST
     , showsType, showsScheme
     , funn
 ) where
 
-import Ast
+import Core.Ast
 
 import Data.Function
 import Control.Category ( (<<<) )

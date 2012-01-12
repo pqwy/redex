@@ -2,14 +2,18 @@
 {-# LANGUAGE TypeSynonymInstances, FlexibleContexts, FlexibleInstances #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE PackageImports  #-}
+{-# LANGUAGE OverloadedStrings  #-}
 
-module Typer
-    ( TypeEnv, tp, typeOf, predefEnv
-    ) where
+module Type.Typer
+--      ( TypeEnv, tp, typeOf, predefEnv
+--      ) where
+where
 
-import Ast
-import Stringy
-import Random
+import Core.Ast
+import Core.Environment hiding (lookup)
+import qualified Core.Environment as E
+import Repr.Stringy
+import Internal.Random
 
 import Data.List ( intercalate, (\\), union )
 import "transformers" Control.Monad.Trans.State
@@ -47,7 +51,7 @@ newInstance (Scheme ids ty) =
             $> (`substitute` ty)
 
 
-type TypeEnv = [(Ident, TypeScheme)]
+type TypeEnv = Environment TypeScheme
 
 
 tyVars :: Type -> [Ident]
@@ -55,9 +59,11 @@ tyVars (TyVar x)     = [x]
 tyVars (Arrow t1 t2) = tyVars t1 `union` tyVars t2
 tyVars (TyCon c ts)  = unions (map tyVars ts)
 
+schemeTyVars ::  TypeScheme -> [Ident]
 schemeTyVars (Scheme ids t) = tyVars t \\ ids
 
-envTyVars = unions . map (schemeTyVars . snd)
+envTyVars :: TypeEnv -> [Ident]
+envTyVars = unions . map schemeTyVars . elems
 
 unions :: (Eq a) => [[a]] -> [a]
 unions = foldr union []
@@ -87,7 +93,7 @@ mgu t u s = case (s `substitute` t, s `substitute` u) of
 tp :: ASTAnn f => TypeEnv -> Term f -> Type -> Subst -> T Subst
 
 tp env (ast -> Var x) ty s =
-    case x `lookup` env of
+    case x `E.lookup` env of
          -- Nothing -> throwError ("undefined: " ++ show x)
          Nothing -> return s -- does not constrain ty: unknowns type as anything at all >:)
          Just u  -> newInstance u >>= \i -> mgu i ty s
@@ -96,7 +102,7 @@ tp env (ast -> Lam x e1) ty s =
     do a <- newTyVar
        b <- newTyVar
        ( mgu ty (Arrow a b) >=>
-           tp ((x, Scheme [] a) : env) e1 b ) s
+           tp (x --> Scheme [] a |+| env) e1 b ) s
 
 tp env (ast -> App e1 e2) ty s =
     do a <- newTyVar
@@ -105,8 +111,8 @@ tp env (ast -> App e1 e2) ty s =
 tp env (ast -> Let x e1 e2) ty s =
     do a  <- newTyVar
 --     s1 <- tp env e1 a s  -- non-recursive let
-       s1 <- tp ((x, Scheme [] a) : env) e1 a s
-       tp ( (x, generalize env (s1 `substitute` a)) : env )
+       s1 <- tp (x --> Scheme [] a |+| env) e1 a s
+       tp ( x --> generalize env (s1 `substitute` a) |+| env )
           e2 ty s1
 
 
@@ -121,10 +127,8 @@ showRaw :: Type -> String
 showRaw = (`showsType` "")
 
 
-
-
 predefEnv :: TypeEnv
-predefEnv = [ (ident tc, generalize [] t) | (tc, t) <- env ]
+predefEnv = fmap (generalize mempty) (mconcat env)
     where
         bool     = TyCon "Bool" []
         int      = TyCon "Int"  []
@@ -135,38 +139,33 @@ predefEnv = [ (ident tc, generalize [] t) | (tc, t) <- env ]
         a = TyVar (ident "t")
         b = TyVar (ident "u")
 
+        i = ident
+
         infixr 9 ~>
         (~>) = Arrow
 
-        env = [ ( "true"      , bool                    )
-              , ( "false"     , bool                    )
-              , ( "if"        , bool ~> a ~> a ~> a     )
-              , ( "zero"      , int                     )
-              , ( "succ"      , int ~> int              )
-              , ( "nil"       , list a                  )
-              , ( "isNil"     , list a ~> bool          )
-              , ( "cons"      , a ~> list a ~> list a   )
-              , ( "isEmpty"   , list a ~> bool          )
-              , ( "head"      , list a ~> a             )
-              , ( "tail"      , list a ~> list a        )
-              , ( "fix"       , (a ~> a) ~> a           )
-              , ( "pair"      , a ~> b ~> pair a b      )
-              , ( "fst"       , pair a b ~> a           )
-              , ( "snd"       , pair a b ~> b           )
-              , ( "undefined" , a                       )
-              , ( "bop"       , type_ ~> type_ ~> type_ )
-              , ( "unop"      , type_ ~> type_          )
-              , ( "con"       , type_                   )
+        env = [ "true"      -->  bool
+              , "false"     -->  bool
+              , "if"        -->  bool ~> a ~> a ~> a
+              , "zero"      -->  int
+              , "succ"      -->  int ~> int
+              , "nil"       -->  list a
+              , "isNil"     -->  list a ~> bool
+              , "cons"      -->  a ~> list a ~> list a
+              , "isEmpty"   -->  list a ~> bool
+              , "head"      -->  list a ~> a
+              , "tail"      -->  list a ~> list a
+              , "fix"       -->  (a ~> a) ~> a
+              , "pair"      -->  a ~> b ~> pair a b
+              , "fst"       -->  pair a b ~> a
+              , "snd"       -->  pair a b ~> b
+              , "undefined" -->  a
+              , "bop"       -->  type_ ~> type_ ~> type_
+              , "unop"      -->  type_ ~> type_
+              , "con"       -->  type_
               ]
 
-
-letMap  = "let ( map = |fx.if (isNil x) nil (cons (f (head x)) (map f (tail x))) ) "
-letZip  = "let ( zip = |fxy.if (isNil x) nil (if (isNil y) nil (cons (f (head x) (head y)) (zip f (tail x) (tail y)))) )"
-letZip' = "let ( zip = fix (|zfxy.if (isNil x) nil (if (isNil y) nil (cons (f (head x) (head y)) (z f (tail x) (tail y))))) ) "
-
-
-expn :: [AST]
-expn = map read [ "|x.cons x nil" ]
-
-
+--  letMap  = "let ( map = |fx.if (isNil x) nil (cons (f (head x)) (map f (tail x))) ) "
+--  letZip  = "let ( zip = |fxy.if (isNil x) nil (if (isNil y) nil (cons (f (head x) (head y)) (zip f (tail x) (tail y)))) )"
+--  letZip' = "let ( zip = fix (|zfxy.if (isNil x) nil (if (isNil y) nil (cons (f (head x) (head y)) (z f (tail x) (tail y))))) ) "
 

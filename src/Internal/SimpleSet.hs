@@ -1,5 +1,6 @@
 {-# LANGUAGE BangPatterns #-}
-module SimpleSet
+
+module Internal.SimpleSet
     ( Set
     , null, empty, singleton, fromList, size
     , insert, queryRemove, elem, remove
@@ -9,6 +10,7 @@ module SimpleSet
 import Prelude hiding ( elem, null )
 import Data.List ( sort )
 import Data.Maybe
+import Data.Monoid
 
 
 data Set a = !a :+ !(Set a) | Nil
@@ -20,6 +22,11 @@ instance (Show a) => Show (Set a) where
       where
         unroll (a :+ Nil) = shows a
         unroll (a :+ set) = shows a . showChar ',' . unroll set
+
+instance Ord a => Monoid (Set a) where
+    mappend = union
+    mempty  = empty
+    mconcat = unions
 
 null :: Set a -> Bool
 null Nil = True
@@ -40,20 +47,20 @@ fromList = nub' . sort
                       | otherwise = a :+ nub' as
 
 size :: Set a -> Int
-size = go 0 where go !n Nil     = n
-                  go !n (_:+as) = go (succ n) as
+size = go 0 where go !n Nil       = n
+                  go !n (_ :+ as) = go (succ n) as
 
 insert :: (Ord a) => a -> Set a -> Set a
 insert a Nil = singleton a
-insert a xs@(x:+xs')
+insert a xs@(x :+ xs')
     | x <  a    = x :+ insert a xs'
     | x == a    = xs
     | otherwise = a :+ xs
 
 queryRemove :: (Ord a) => a -> Set a -> Maybe (Set a)
 queryRemove a Nil = Nothing
-queryRemove a xs@(x:+xs')
-    | x  < a    = (x:+) `fmap` queryRemove a xs'
+queryRemove a xs@(x :+ xs')
+    | x  < a    = (x :+) `fmap` queryRemove a xs'
     | x == a    = Just xs'
     | otherwise = Nothing
 
@@ -66,7 +73,7 @@ remove a s = fromMaybe s (queryRemove a s)
 union :: (Ord a) => Set a -> Set a -> Set a
 union Nil bs  = bs
 union as  Nil = as
-union as@(a:+as') bs@(b:+bs') =
+union as@(a :+ as') bs@(b :+ bs') =
     case a `compare` b of
          LT -> a :+ union as' bs
          EQ -> a :+ union as' bs'
@@ -76,7 +83,7 @@ unions :: (Ord a) => [Set a] -> Set a
 unions = foldr union empty
 
 intersection :: (Ord a) => Set a -> Set a -> Set a
-intersection as@(a:+as') bs@(b:+bs')
+intersection as@(a :+ as') bs@(b :+ bs')
     | a <  b    =      intersection as' bs
     | a == b    = a :+ intersection as' bs'
     | otherwise =      intersection as bs'
@@ -84,7 +91,7 @@ intersection _ _ = Nil
 
 subset :: (Ord a) => Set a -> Set a -> Bool
 subset Nil _ = True
-subset as@(a:+as') bs@(b:+bs')
+subset as@(a :+ as') bs@(b :+ bs')
     | a  < b    = False
     | a == b    = subset as' bs'
     | otherwise = subset as bs'
