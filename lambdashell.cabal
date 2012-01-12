@@ -1,0 +1,33 @@
+Name:                lambdashell
+Version:             0.1
+Synopsis:            Bits for playing with lambda calculus
+Description:         A system with typing, reduction and graphing of pure
+                     lambda; it attains and loses priops every now and then.
+Homepage:            https://github.com/pqwy/lambdashell
+License:             BSD3
+License-file:        LICENSE
+Author:              David Kaloper
+-- Maintainer:          
+Category:            Language
+
+Build-type:          Simple
+
+Cabal-version:       >=1.2
+
+Library
+  Hs-source-dirs: src
+
+  Exposed-modules:     Ast, Typer, Stringy, Random, Graphs
+  -- , Operations, Reductions, Primitives
+  
+  -- Other-modules:       SimpleSet
+
+  Build-depends:
+      base              >= 4.4
+    , template-haskell  >= 2.6
+    , syb               >= 0.3.5
+    , transformers      >= 0.2
+    , monads-fd         >= 0.2
+    , parsec            >= 3.1
+    , fgl               >= 5.4
+    , graphviz          == 2999.12.0.*

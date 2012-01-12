@@ -100,18 +100,18 @@ bracket open close between = (open ++) <<< between <<< (close ++)
 parens :: ShowS -> ShowS
 parens = bracket "(" ")"
 
-showsAtom, showsAST :: ASTAnn f => Term f -> ShowS
+showsASTParens, showsAST :: ASTAnn f => Term f -> ShowS
 
-showsAtom t@(ast -> Var _)    = showsAST t
-showsAtom t                   = parens (showsAST t)
+showsASTParens t@(ast -> Var _) = showsAST t
+showsASTParens t                = parens (showsAST t)
 
 showsAST (ast -> Var x) = shows x
 
 showsAST (ast -> App l r) =
     ( case ast l of
-           App _ _ -> showsAST  l
-           _       -> showsAtom l )
-    <<< (' ' :) <<< showsAtom r
+           App _ _ -> showsAST       l
+           _       -> showsASTParens l )
+    <<< (' ' :) <<< showsASTParens r
 
 showsAST (ast -> Lam x t) =
     ('λ' :) <<< shows x <<<
@@ -135,22 +135,22 @@ instance (Data (Term f), ASTAnn f) => Show (Term f) where
 
 -- {{{ out ty
 
-brk, showsType :: Type -> ShowS
+showsTypeParens, showsType :: Type -> ShowS
 
-brk t@(TyVar _)    = showsType t
-brk t@(TyCon _ []) = showsType t
-brk t              = parens (showsType t)
+showsTypeParens t@(TyVar _)    = showsType t
+showsTypeParens t@(TyCon _ []) = showsType t
+showsTypeParens t              = parens (showsType t)
 
 showsType (TyVar i) = shows i
 showsType (Arrow t1 t2) =
-    brk t1 <<< (" -> " ++) <<<
+    showsTypeParens t1 <<< (" -> " ++) <<<
     case t2 of
          (Arrow _ _) -> showsType t2
-         _           -> brk t2
+         _           -> showsTypeParens t2
 
 showsType (TyCon c []) = (c ++)
 showsType (TyCon c ts) =
-    (c ++) <<< foldr (\s k -> (' ':) . s . k) id (map brk ts)
+    (c ++) <<< foldr (\s k -> (' ':) . s . k) id (map showsTypeParens ts)
 
 showsScheme (Scheme [] t) = showsType t
 showsScheme (Scheme as t) =
