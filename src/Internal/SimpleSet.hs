@@ -2,15 +2,15 @@
 
 module Internal.SimpleSet
     ( Set
-    , null, empty, singleton, fromList, size
-    , insert, queryRemove, elem, remove
+    , null, empty, singleton, fromList, toList, size
+    , insert, elem, remove, (\\)
     , union, unions, intersection, subset
     ) where
 
 import Prelude hiding ( elem, null )
 import Data.List ( sort )
 import Data.Maybe
-import Data.Monoid
+import Data.Monoid ( Monoid (..) )
 
 
 data Set a = !a :+ !(Set a) | Nil
@@ -18,7 +18,7 @@ data Set a = !a :+ !(Set a) | Nil
 
 instance (Show a) => Show (Set a) where
     showsPrec _ Nil = ("empty" ++)
-    showsPrec _ set = showString "fromList [" . unroll set . showString "]"
+    showsPrec _ set = showString "{" . unroll set . showString "}"
       where
         unroll (a :+ Nil) = shows a
         unroll (a :+ set) = shows a . showChar ',' . unroll set
@@ -36,63 +36,65 @@ empty :: Set a
 empty = Nil
 
 singleton :: a -> Set a
-singleton a = a :+ Nil
+singleton = (:+ Nil)
 
 fromList :: (Ord a) => [a] -> Set a
-fromList = nub' . sort
+fromList = foldr nub Nil . sort
   where
-    nub' []  = Nil
-    nub' [a] = a :+ Nil
-    nub' (a:as@(b:_)) | a == b    = nub' as
-                      | otherwise = a :+ nub' as
+    nub e r@(a:+_) | e == a = r
+    nub e r                 = e :+ r
 
 size :: Set a -> Int
 size = go 0 where go !n Nil       = n
                   go !n (_ :+ as) = go (succ n) as
 
+locating :: (Ord a) => ((Set a -> Set a) -> Set a -> Maybe a -> b) -> a -> Set a -> b
+locating f x = go id
+  where
+    go k Nil = f k Nil Nothing
+    go k s@(a :+ as) | a  < x    = go ((k $!).(a :+)) as
+                     | a == x    = f k as (Just a)
+                     | otherwise = f k s Nothing
+
 insert :: (Ord a) => a -> Set a -> Set a
-insert a Nil = singleton a
-insert a xs@(x :+ xs')
-    | x <  a    = x :+ insert a xs'
-    | x == a    = xs
-    | otherwise = a :+ xs
-
-queryRemove :: (Ord a) => a -> Set a -> Maybe (Set a)
-queryRemove a Nil = Nothing
-queryRemove a xs@(x :+ xs')
-    | x  < a    = (x :+) `fmap` queryRemove a xs'
-    | x == a    = Just xs'
-    | otherwise = Nothing
-
-elem :: (Ord a) => a -> Set a -> Bool
-elem a = isJust . queryRemove a
+insert a s = locating (\k as -> maybe (k (a :+ as)) (\_ -> s)) a s
 
 remove :: (Ord a) => a -> Set a -> Set a
-remove a s = fromMaybe s (queryRemove a s)
+remove = locating $ \k as _ -> k as
+
+elem :: (Ord a) => a -> Set a -> Bool
+elem = locating $ \_ _ -> maybe False (\_ -> True)
+
+pfoldr :: (Ord a)
+       => (a -> b -> b) -> (a -> b -> b) -> (a -> b -> b)
+       -> b -> Set a -> Set a -> b
+
+pfoldr f g h s = go
+  where
+    go    Nil         Nil      = s
+    go    (a:+as)     Nil      = f a (go as Nil)
+    go    Nil         (b:+bs)  = g b (go Nil bs)
+    go as@(a:+as') bs@(b:+bs') =
+        case a `compare` b of
+             LT -> f a (go as' bs )
+             GT -> g b (go as  bs')
+             EQ -> h a (go as' bs')
 
 union :: (Ord a) => Set a -> Set a -> Set a
-union Nil bs  = bs
-union as  Nil = as
-union as@(a :+ as') bs@(b :+ bs') =
-    case a `compare` b of
-         LT -> a :+ union as' bs
-         EQ -> a :+ union as' bs'
-         GT -> b :+ union as  bs'
+union = pfoldr (:+) (:+) (:+) empty
 
 unions :: (Ord a) => [Set a] -> Set a
 unions = foldr union empty
 
 intersection :: (Ord a) => Set a -> Set a -> Set a
-intersection as@(a :+ as') bs@(b :+ bs')
-    | a <  b    =      intersection as' bs
-    | a == b    = a :+ intersection as' bs'
-    | otherwise =      intersection as bs'
-intersection _ _ = Nil
+intersection = pfoldr (\_ -> id) (\_ -> id) (:+) empty
 
 subset :: (Ord a) => Set a -> Set a -> Bool
-subset Nil _ = True
-subset as@(a :+ as') bs@(b :+ bs')
-    | a  < b    = False
-    | a == b    = subset as' bs'
-    | otherwise = subset as bs'
+subset = pfoldr (\_ _ -> False) (\_ b -> b) (\_ b -> b) True
+
+(\\) :: (Ord a) => Set a -> Set a -> Set a
+(\\) = pfoldr (:+) (\_ b -> b) (\_ b -> b) Nil
+
+toList :: (Ord a) => Set a -> [a]
+toList = pfoldr undefined (:) undefined [] Nil
 
