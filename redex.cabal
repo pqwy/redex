@@ -1,9 +1,9 @@
-Name:                lambdashell
+Name:                redex
 Version:             0.1
 Synopsis:            Bits for playing with lambda calculus
-Description:         A system with typing, reduction and graphing of pure
-                     lambda; it attains and loses priops every now and then.
-Homepage:            https://github.com/pqwy/lambdashell
+Description:         Yet another system for evaluating, typing and visualising
+                     lambda calculus. But this one is mine.
+Homepage:            https://github.com/pqwy/redex
 License:             BSD3
 License-file:        LICENSE
 Author:              David Kaloper
@@ -18,11 +18,11 @@ Library
   Hs-source-dirs: src
 
   Exposed-modules:
-      Core.Ast
-    , Repr.Stringy
-    , Repr.Graphs
-    , Type.Typer 
-  -- , Operations, Reductions, Primitives
+    Core.Ast
+    Repr.Stringy
+    Repr.Graphs
+    Type.Typer 
+  -- Operations, Reductions, Primitives
   
   Other-modules:       Internal.SimpleSet, Internal.Random
 
