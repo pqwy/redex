@@ -37,6 +37,13 @@ instance IsString Ident where fromString = ident
 
 -- {{{  Terms
 
+--
+-- The deal with terms. There is a tension between the
+-- a) need to decorate the term representation in certain parts;
+-- b) for the decoration to remain abstract, i.e. views <-> smart ctors; and
+-- c) avoid type proliferation.
+-- ...which is why terms are mutually wrapped with an arbitrary functor.
+--
 data Term f = Term (f (Node f))
 
 data Node f = Var Ident
@@ -44,19 +51,22 @@ data Node f = Var Ident
             | Lam Ident (Term f)
             | Let Ident (Term f) (Term f)
 
+--
+-- This would be the initial algebra of Terms, then.
+--
 type AST = Term Identity
 
 toAST :: Node Identity -> AST
 toAST = Term . Identity
 
 var :: Ident -> AST
-var  = toAST       . Var
+var  = toAST . Var
 
 app :: AST -> AST -> AST
-app  = (toAST.)    . App
+app  = (toAST.) . App
 
 lam :: Ident -> AST -> AST
-lam  = (toAST.)    . Lam
+lam  = (toAST.) . Lam
 
 let_ :: Ident -> AST -> AST -> AST
 let_ = ((toAST.).) . Let
@@ -69,11 +79,12 @@ ast :: ASTAnn f => Term f -> Node f
 ast (Term fn) = strip fn
 
 
--- Morbid instances.
---
 tc :: String -> TyCon
 tc = mkTyCon3 "lambdashell" "Ast"
 
+--
+-- Morbid instances. Pretty impredicative, but fun :) .
+--
 instance Typeable1 f => Typeable (Term f) where
     typeOf _ = tc "Term" `mkTyConApp` [typeOf1 (undefined :: f ())]
 
@@ -102,7 +113,7 @@ deriving instance Data a => Data (Identity a)
 
 -- {{{ types
 
--- Like System T, monomorphic but with type constructors.
+-- Like System T, monomorphic + type constructors.
 data Type = TyVar Ident
           | Arrow Type Type
           | TyCon String [Type]
