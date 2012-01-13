@@ -9,13 +9,17 @@ module Type.Typer
 --      ) where
 where
 
-import Core.Ast
-import Core.Environment hiding (lookup)
+import Prelude hiding ( elem )
+import           Core.Ast
+import           Core.Environment hiding ( lookup )
 import qualified Core.Environment as E
-import Repr.Stringy
-import Internal.Random
+import           Internal.SimpleSet
+import           Internal.Random
+import           Repr.Stringy
 
-import Data.List ( intercalate, (\\), union )
+import Data.Monoid
+
+--  import Data.List ( intercalate, (\\), union )
 import "transformers" Control.Monad.Trans.State
 import "monads-fd" Control.Monad.Error
 import Control.Applicative
@@ -53,79 +57,93 @@ newInstance (Scheme ids ty) =
 
 type TypeEnv = Environment TypeScheme
 
+scheme :: Set Ident -> Type -> TypeScheme
+scheme = Scheme . toList
 
-tyVars :: Type -> [Ident]
-tyVars (TyVar x)     = [x]
+scheme_ :: TypeScheme -> (Set Ident, Type)
+scheme_ (Scheme ids t) = (fromList ids, t)
+
+tyVars :: Type -> Set Ident
+tyVars (TyVar x)     = singleton x
 tyVars (Arrow t1 t2) = tyVars t1 `union` tyVars t2
-tyVars (TyCon c ts)  = unions (map tyVars ts)
+tyVars (TyCon c ts)  = mconcat (map tyVars ts)
 
-schemeTyVars ::  TypeScheme -> [Ident]
-schemeTyVars (Scheme ids t) = tyVars t \\ ids
+schemeTyVars :: TypeScheme -> Set Ident
+schemeTyVars (scheme_ -> (ids, t)) = tyVars t \\ ids
 
-envTyVars :: TypeEnv -> [Ident]
-envTyVars = unions . map schemeTyVars . elems
-
-unions :: (Eq a) => [[a]] -> [a]
-unions = foldr union []
-
+envTyVars :: TypeEnv -> Set Ident
+envTyVars = mconcat . map schemeTyVars . elems
 
 generalize :: TypeEnv -> Type -> TypeScheme
-generalize e t = Scheme (tyVars t \\ envTyVars e) t
+generalize e t = scheme (tyVars t \\ envTyVars e) t
 
-mgu :: Type -> Type -> Subst -> T Subst
+--
+-- Simple unification of two type expressions, given substitution environment.
+--
+unify :: Type -> Type -> Subst -> T Subst
+unify t u s = case (s `substitute` t, s `substitute` u) of
 
-mgu t u s = case (s `substitute` t, s `substitute` u) of
+         (TyVar a, TyVar b) | a == b -> return s
 
-         ((TyVar a), (TyVar b)) | a == b -> return s
-         ((TyVar a), u')        | not (a `elem` tyVars u') -> return (extend a u' s)
-                                | otherwise ->
-                        throwError ( "Occurs check: cannot construct the infinite type: "
+         (TyVar a, u') | not (a `elem` tyVars u') -> return (extend a u' s)
+                       | otherwise                -> throwError
+                                    ( "Occurs check: cannot construct the infinite type: "
                                         ++ show a ++ " = " ++ showRaw u' )
-         (t, u'@(TyVar _)) -> mgu u' t s
+         (t, u'@(TyVar _)) ->
+             unify u' t s
 
-         ((Arrow t1 t2), (Arrow u1 u2)) -> (mgu t1 u1 >=> mgu t2 u2) s
+         (Arrow t1 t2, Arrow u1 u2) ->
+             (unify t1 u1 >=> unify t2 u2) s
 
-         ((TyCon a as), (TyCon b bs)) | a == b -> foldM (flip id) s (zipWith mgu as bs)
+         (TyCon a as, TyCon b bs) | a == b ->
+             foldM (flip id) s (zipWith unify as bs)
 
-         (t', u') -> throwError ( "cannot unify " ++ showRaw t' ++ " with " ++ showRaw u' )
-
-
-tp :: ASTAnn f => TypeEnv -> Term f -> Type -> Subst -> T Subst
-
-tp env (ast -> Var x) ty s =
-    case x `E.lookup` env of
-         -- Nothing -> throwError ("undefined: " ++ show x)
-         Nothing -> return s -- does not constrain ty: unknowns type as anything at all >:)
-         Just u  -> newInstance u >>= \i -> mgu i ty s
-
-tp env (ast -> Lam x e1) ty s =
-    do a <- newTyVar
-       b <- newTyVar
-       ( mgu ty (Arrow a b) >=>
-           tp (x --> Scheme [] a |+| env) e1 b ) s
-
-tp env (ast -> App e1 e2) ty s =
-    do a <- newTyVar
-       ( tp env e1 (Arrow a ty) >=> tp env e2 a ) s
-
-tp env (ast -> Let x e1 e2) ty s =
-    do a  <- newTyVar
---     s1 <- tp env e1 a s  -- non-recursive let
-       s1 <- tp (x --> Scheme [] a |+| env) e1 a s
-       tp ( x --> generalize env (s1 `substitute` a) |+| env )
-          e2 ty s1
-
-
-typeOf :: ASTAnn f => TypeEnv -> Term f -> Either String TypeScheme
-typeOf env expr = runT
-    ( newTyVar >>= \a ->
-        tp env expr a emptySubst $>
-            generalize env . (`substitute` a) )
-
+         (t', u') ->
+             throwError ( "cannot unify " ++ showRaw t' ++ " with " ++ showRaw u' )
 
 showRaw :: Type -> String
 showRaw = (`showsType` "")
 
+--
+-- Prove a term can be typed by a particular type, in a given type environment
+-- and with a given unifier, producing the most general unifier satisfying this
+-- along the way.
+-- 
+prove :: ASTAnn f => TypeEnv -> Term f -> Type -> Subst -> T Subst
+
+prove env (ast -> Var x) ty s =
+    case x `E.lookup` env of
+         -- Nothing -> throwError ("undefined: " ++ show x)
+         Nothing -> return s -- does not constrain ty: unknowns type as anything at all >:)
+         Just u  -> newInstance u >>= \i -> unify i ty s
+
+prove env (ast -> Lam x e1) ty s =
+    do a <- newTyVar
+       b <- newTyVar
+       ( unify ty (Arrow a b) >=>
+           prove (x --> Scheme [] a |+| env) e1 b ) s
+
+prove env (ast -> App e1 e2) ty s =
+    do a <- newTyVar
+       ( prove env e1 (Arrow a ty) >=> prove env e2 a ) s
+
+prove env (ast -> Let x e1 e2) ty s =
+    do a  <- newTyVar
+--     s1 <- prove env e1 a s  -- non-recursive let
+       s1 <- prove (x --> Scheme [] a |+| env) e1 a s
+       prove ( x --> generalize env (s1 `substitute` a) |+| env )
+          e2 ty s1
+
+
+--
+-- Type inference: a matter of proving that a fresh type variable types the
+-- term, and noting what the variable ended up unified with.
+-- 
+inferType :: ASTAnn f => TypeEnv -> Term f -> Either String TypeScheme
+inferType env expr = runT
+    ( newTyVar >>= \a ->
+        prove env expr a emptySubst $>
+            generalize env . (`substitute` a) )
 
 predefEnv :: TypeEnv
 predefEnv = fmap (generalize mempty) (mconcat env)
