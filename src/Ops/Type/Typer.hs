@@ -4,7 +4,7 @@
 {-# LANGUAGE PackageImports  #-}
 {-# LANGUAGE OverloadedStrings  #-}
 
-module Type.Typer
+module Ops.Type.Typer
 --      ( TypeEnv, tp, typeOf, predefEnv
 --      ) where
 where
