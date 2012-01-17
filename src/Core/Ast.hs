@@ -1,7 +1,6 @@
-{-# LANGUAGE DeriveDataTypeable, StandaloneDeriving  #-}
-{-# LANGUAGE ScopedTypeVariables  #-}
-{-# LANGUAGE UndecidableInstances  #-}
-{-# LANGUAGE ViewPatterns  #-}
+{-# LANGUAGE UndecidableInstances, DeriveDataTypeable, StandaloneDeriving #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 module Core.Ast (
       Ident (..), ident, variateIdent
@@ -14,6 +13,7 @@ import Data.Data
 import Data.Functor.Identity
 
 import Data.String ( IsString (..) )
+import qualified Language.Haskell.TH as TH ( nameModule )
 
 -- {{{  Identifiers
 
@@ -65,7 +65,9 @@ ast :: ASTAnn f => Term f -> Node f
 ast (Term fn) = strip fn
 
 tc :: String -> TyCon
-tc = mkTyCon3 "lambdashell" "Ast"
+tc = mkTyCon3 "redex" name
+    -- This needs TH - find more portable way to discover module name?
+    where Just name = TH.nameModule ''Term
 
 --
 -- Morbid instances. Impredicative bunnies are impredicative.

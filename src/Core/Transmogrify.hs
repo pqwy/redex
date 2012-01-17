@@ -26,6 +26,8 @@ bNode = Builder Var App Lam Let
 bAst :: Builder AST AST
 bAst = (Term . Identity) `fmap` bNode
 
+-- Change them.
+-- 
 tpara :: ASTAnn f => (Term f -> b -> a) -> Builder a b -> Term f -> a
 tpara f b t@(ast -> Var i       ) = f t (var b i)
 tpara f b t@(ast -> App e1 e2   ) = f t (app b (tpara f b e1) (tpara f b e2))

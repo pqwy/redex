@@ -21,7 +21,7 @@ Library
     Core.Ast
     Repr.Stringy
     Repr.Graphs
-    Type.Typer 
+    Ops.Type.Typer 
   -- Operations, Reductions, Primitives
   
   Other-modules:       Internal.SimpleSet, Internal.Random
