@@ -2,12 +2,12 @@
 {-# LANGUAGE TypeSynonymInstances, FlexibleInstances #-}
 {-# LANGUAGE UndecidableInstances  #-}
 {-# LANGUAGE PackageImports  #-}
+
 {-# OPTIONS_GHC -fno-warn-overlapping-patterns #-}
 
 module Repr.Stringy (
       showsAST, parseAST, tryParseAST
     , showsType, showsScheme
-    , funn
 ) where
 
 import Core.Ast
@@ -15,6 +15,7 @@ import Core.Transmogrify
 
 import Data.Function
 import Control.Category ( (<<<) )
+import Data.Functor.Identity
 
 import Text.ParserCombinators.Parsec hiding ( State(..) )
 import Text.ParserCombinators.Parsec.Error ( Message(..), errorMessages )
@@ -23,9 +24,6 @@ import Control.Applicative hiding ( Alternative(..), many )
 import "monads-fd" Control.Monad.State
 
 import Data.Generics
-
-import qualified Language.Haskell.TH.Quote  as QQ
-
 
 -- in {{{
 
@@ -65,7 +63,7 @@ pLet = flip (foldr (uncurry $ le7 bAst))
 pTermEND = pTerm <* eof
 
 parseAST :: SourceName -> String -> Either ParseError AST
-parseAST n s = parse pTerm n s
+parseAST n s = parse pTermEND n s
 
 tryParseAST :: SourceName -> String -> Either ParseError (Maybe AST)
 tryParseAST n s = case parseAST n s of
@@ -83,14 +81,6 @@ unexpectedEOF = any unexpected . errorMessages
 instance Read AST where
     readsPrec _ = either (const []) (:[]) . parse p "<literal>" where
               p = (,) <$> pTermEND <*> getInput
-
-funn :: QQ.QuasiQuoter
-funn = QQ.QuasiQuoter (either (\e -> error $ "\n" ++ show e ++ "\n")
-                              (QQ.dataToExpQ (\_ -> Nothing))
-                              . parse pTermEND "Quoted term")
-                      no no no
-  where
-    no = error $ "funn: quasiquoter defined only for expression contexts."
 
 -- }}}
 
@@ -186,9 +176,9 @@ runShw sh = (fst . fix) (\ ~(_, s) -> runState sh
                                     , replaceMap = [] } )
 
 cleanIdentifier :: Ident -> Shw Ident
-cleanIdentifier t@(ID _) =
+cleanIdentifier t@(Id _) =
         modify (\s -> s { takenGen0 = t : takenGen0 s }) >> return t
-cleanIdentifier t@(IDD _ _) = do
+cleanIdentifier t@(Idn _ _) = do
     bundle <- get
     case t `lookup` replaceMap bundle of
          Just t' -> return t'

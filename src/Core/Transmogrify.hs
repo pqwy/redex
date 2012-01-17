@@ -33,6 +33,9 @@ tpara f b t@(ast -> Lam i  e    ) = f t (lam b i (tpara f b e))
 tpara f b t@(ast -> Let i  e1 e2) = f t (le7 b i (tpara f b e1) (tpara f b e2))
 tpara _ _ _ = error "Core.Transmogrify.tpara: missing ctor."
 
+tfold :: ASTAnn f => (b -> a) -> Builder a b -> Term f -> a
+tfold = tpara . const
+
 tmap :: ASTAnn f => (Term f -> Node g -> Term g) -> Term f -> Term g
 tmap f = tpara f bNode
 

@@ -17,20 +17,20 @@ import Data.String ( IsString (..) )
 
 -- {{{  Identifiers
 
-data Ident = ID  String
-           | IDD String Int
+data Ident = Id  String
+           | Idn String Int
     deriving (Eq, Ord, Typeable, Data)
 
 instance Show Ident where
-    show (ID  x  ) = x
-    show (IDD x n) = x ++ "__" ++ show n
+    show (Id  x  ) = x
+    show (Idn x n) = x ++ "__" ++ show n
 
 ident :: String -> Ident
-ident = ID
+ident = Id
 
 variateIdent :: Ident -> Ident
-variateIdent (ID  x  ) = IDD x 0
-variateIdent (IDD x n) = IDD x (succ n)
+variateIdent (Id  x  ) = Idn x 0
+variateIdent (Idn x n) = Idn x (succ n)
 
 instance IsString Ident where fromString = ident
 
