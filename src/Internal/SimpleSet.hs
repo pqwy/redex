@@ -1,4 +1,4 @@
-{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE DeriveDataTypeable, BangPatterns #-}
 
 module Internal.SimpleSet
     ( Set
@@ -11,10 +11,11 @@ import Prelude hiding ( elem, null )
 import Data.List ( sort )
 import Data.Maybe
 import Data.Monoid ( Monoid (..) )
+import Data.Data
 
 
 data Set a = !a :+ !(Set a) | Nil
-    deriving (Eq)
+    deriving (Data, Typeable, Eq)
 
 instance (Show a) => Show (Set a) where
     showsPrec _ Nil = ("empty" ++)

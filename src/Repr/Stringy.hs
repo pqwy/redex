@@ -11,6 +11,7 @@ module Repr.Stringy (
 ) where
 
 import Core.Ast
+import Core.Transmogrify
 
 import Data.Function
 import Control.Category ( (<<<) )
@@ -24,6 +25,7 @@ import "monads-fd" Control.Monad.State
 import Data.Generics
 
 import qualified Language.Haskell.TH.Quote  as QQ
+
 
 -- in {{{
 
@@ -44,17 +46,17 @@ lambda = () <$ oneOf "\\|λ"
 
 pTerm, pAtom, pLambda, pVar, pLet, pTermEND :: Parser AST
 
-pVar  = var <$> pIdent
+pVar  = var bAst <$> pIdent
 
-pTerm = foldl1 app <$> many1 ( pAtom <?> "term" )
+pTerm = foldl1 (app bAst) <$> many1 ( pAtom <?> "term" )
 
 pAtom = spaces *> ( paren'd pTerm <|> pLambda <|> pLet <|> pVar ) <* spaces -- closing space??
 
 pLambda = do
     vars <- lambda *> many1 pIdent <* char '.'
-    flip (foldr lam) vars <$> pTerm
+    flip (foldr (lam bAst)) vars <$> pTerm
 
-pLet = flip (foldr (uncurry let_))
+pLet = flip (foldr (uncurry $ le7 bAst))
         <$> (try (string "let") *> many1 (try binder))
         <*> pTerm
   where

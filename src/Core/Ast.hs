@@ -1,11 +1,12 @@
 {-# LANGUAGE DeriveDataTypeable, StandaloneDeriving  #-}
 {-# LANGUAGE ScopedTypeVariables  #-}
 {-# LANGUAGE UndecidableInstances  #-}
+{-# LANGUAGE ViewPatterns  #-}
 
 module Core.Ast (
       Ident (..), ident, variateIdent
     , Term (..), Node (..), AST, ast
-    , ASTAnn (..), toAST, var, app, lam, let_
+    , ASTAnn (..)
     , Type (..), TypeScheme (..)
 ) where
 
@@ -52,38 +53,22 @@ data Node f = Var Ident
             | Let Ident (Term f) (Term f)
 
 --
--- This would be the initial algebra of Terms, then.
+-- This would be the terminal algebra of Terms, then.
 --
 type AST = Term Identity
 
-toAST :: Node Identity -> AST
-toAST = Term . Identity
-
-var :: Ident -> AST
-var  = toAST . Var
-
-app :: AST -> AST -> AST
-app  = (toAST.) . App
-
-lam :: Ident -> AST -> AST
-lam  = (toAST.) . Lam
-
-let_ :: Ident -> AST -> AST -> AST
-let_ = ((toAST.).) . Let
-
-class ASTAnn a where strip :: a (Node a) -> Node a
+class ASTAnn f where strip :: f (Node f) -> Node f
 
 instance ASTAnn Identity where strip = runIdentity
 
 ast :: ASTAnn f => Term f -> Node f
 ast (Term fn) = strip fn
 
-
 tc :: String -> TyCon
 tc = mkTyCon3 "lambdashell" "Ast"
 
 --
--- Morbid instances. Pretty impredicative, but fun :) .
+-- Morbid instances. Impredicative bunnies are impredicative.
 --
 instance Typeable1 f => Typeable (Term f) where
     typeOf _ = tc "Term" `mkTyConApp` [typeOf1 (undefined :: f ())]
@@ -97,6 +82,7 @@ deriving instance (Typeable (Node f), Data (Term f)) => Data (Node f)
 
 deriving instance Typeable1 Identity
 deriving instance Data a => Data (Identity a)
+
 
 -- Much simpler instances. Maybe go with this?
 --
